@@ -1404,12 +1404,7 @@ export default {
             quote: quotedMessage.value || null,
           };
 
-          socket.emit("chat_message", {
-            ...messageData,
-            localId: localMessage.id, // 添加localId以便接收时识别
-          });
-
-          // 更新本地消息的imgUrl
+          // 立即更新本地消息状态，不再等待服务器确认
           const index = messages.value.findIndex(
             (msg) => msg.id === localMessage.id
           );
@@ -1417,6 +1412,11 @@ export default {
             messages.value[index].imgUrl = imageUrl;
             messages.value[index].uploading = false;
           }
+
+          socket.emit("chat_message", {
+            ...messageData,
+            localId: localMessage.id, // 添加localId以便接收时识别
+          });
         }
 
         return true; // 发送成功返回true
@@ -2243,6 +2243,7 @@ export default {
     };
 
     return {
+      uploadRef,
       coreId,
       username,
       isLoggedIn,

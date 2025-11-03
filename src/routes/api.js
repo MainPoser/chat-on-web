@@ -2,65 +2,51 @@ const express = require("express");
 const router = express.Router();
 const fs = require("fs");
 const path = require('path');
-const { DATA_DIR, NOTICE_FILE_PATH } = require('../config/constants');
+const { DATA_DIR, NOTICE_FILE_PATH, TEMP_UPLOAD_DIR, CDN_IMAGES_DIR } = require('../config/constants');
 const { validateUserId } = require('../middleware/auth');
+const { mockObjectStorage } = require('../services/storageService');
+const { tempUploads } = require('../services/userService');
 
 // 获取临时签名URL接口
 router.post(
-  "/api/get-presigned-url",
+  "/get-presigned-url",
   validateUserId,
   (req, res) => {
-    // 原始逻辑完全不变
     try {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
+      const { filename, fileType } = req.body;
+
+      if (!filename || !fileType) {
+        return res.status(400).json({
+          success: false,
+          message: "缺少文件名或文件类型"
+        });
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(fileType)) {
+        return res.status(400).json({
+          success: false,
+          message: "只支持JPG、PNG、GIF和WebP格式的图片"
+        });
+      }
+
+      const presignedInfo = mockObjectStorage.generatePresignedUrl(
+        req.user.userId,
+        filename,
+        fileType
+      );
+
+      tempUploads.set(presignedInfo.uploadUrl.split('/').pop(), {
+        filename: presignedInfo.filename,
+        userId: req.user.userId,
+        expireAt: presignedInfo.expireAt
       });
 
-      req.on("end", () => {
-        try {
-          const data = JSON.parse(body);
-          const { filename, fileType } = data;
-
-          if (!filename || !fileType) {
-            return res.status(400).json({
-              success: false,
-              message: "缺少文件名或文件类型"
-            });
-          }
-
-          const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-          if (!allowedTypes.includes(fileType)) {
-            return res.status(400).json({
-              success: false,
-              message: "只支持JPG、PNG、GIF和WebP格式的图片"
-            });
-          }
-
-          const presignedInfo = mockObjectStorage.generatePresignedUrl(
-            req.user.userId,
-            filename,
-            fileType
-          );
-
-          tempUploads.set(presignedInfo.uploadUrl.split('/').pop(), {
-            filename: presignedInfo.filename,
-            userId: req.user.userId,
-            expireAt: presignedInfo.expireAt
-          });
-
-          res.json({
-            success: true,
-            uploadUrl: presignedInfo.uploadUrl,
-            filename: presignedInfo.filename,
-            expireAt: presignedInfo.expireAt
-          });
-        } catch (error) {
-          res.status(400).json({
-            success: false,
-            message: "请求数据格式错误"
-          });
-        }
+      res.json({
+        success: true,
+        uploadUrl: presignedInfo.uploadUrl,
+        filename: presignedInfo.filename,
+        expireAt: presignedInfo.expireAt
       });
     } catch (error) {
       console.error("生成签名URL失败:", error);
@@ -73,8 +59,10 @@ router.post(
 );
 
 // 模拟对象存储上传接口
-router.put("/api/mock-upload/:signature", (req, res) => {
-  // 原始逻辑完全不变
+router.put("/mock-upload/:signature", (req, res) => {
+  // 设置响应头为JSON格式
+  res.setHeader('Content-Type', 'application/json');
+  
   const signature = req.params.signature;
   const uploadInfo = tempUploads.get(signature);
 
@@ -129,13 +117,13 @@ router.put("/api/mock-upload/:signature", (req, res) => {
 });
 
 // 获取在线用户列表API
-router.get("/api/users", validateUserId, (req, res) => {
+router.get("/users", validateUserId, (req, res) => {
   // 原始逻辑完全不变
   res.json({ users: Array.from(require('../services/userService').onlineUsers.values()) });
 });
 
 // 获取公告API
-router.get('/api/notices', (req, res) => {
+router.get('/notices', (req, res) => {
   // 原始逻辑完全不变
   if (fs.existsSync(NOTICE_FILE_PATH)) {
     const content = fs.readFileSync(NOTICE_FILE_PATH, 'utf-8');
@@ -146,71 +134,58 @@ router.get('/api/notices', (req, res) => {
 });
 
 // 更新用户昵称API
-router.post("/api/update-nickname", validateUserId, (req, res) => {
-  // 原始逻辑完全不变
+router.post("/update-nickname", validateUserId, (req, res) => {
   try {
     // 允许 API 访问 io 实例来广播事件
     const io = req.app.get('io');
     
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-    });
+    const { nickname } = req.body;
 
-    req.on("end", () => {
-      try {
-        const data = JSON.parse(body);
-        const { nickname } = data;
+    if (nickname.length > 20) {
+      return res
+        .status(400)
+        .json({ success: false, message: "昵称不能超过20个字符" });
+    }
 
-        if (nickname.length > 20) {
-          return res
-            .status(400)
-            .json({ success: false, message: "昵称不能超过20个字符" });
+    const userInfo = userInfoMap.get(req.user.userId);
+    if (userInfo) {
+      const userId = userInfo.userId;
+      
+      userInfo.nickname = nickname;
+      userInfoMap.set(req.user.username, userInfo);
+
+      chatHistory.forEach(message => {
+        if (message.userId === userId) {
+          message.username = nickname;
+          if (message.userName) {
+            message.userName = nickname;
+          }
         }
-
-        const userInfo = userInfoMap.get(req.user.userId);
-        if (userInfo) {
-          const userId = userInfo.userId;
-          
-          userInfo.nickname = nickname;
-          userInfoMap.set(req.user.username, userInfo);
-
-          chatHistory.forEach(message => {
-            if (message.userId === userId) {
-              message.username = nickname;
-              if (message.userName) {
-                message.userName = nickname;
-              }
-            }
-            if (message.quote && message.quote.userId === userId) {
-              message.quote.username = nickname;
-              if (message.quote.userName) {
-                message.quote.userName = nickname;
-              }
-            }
-          });
-
-          io.emit("user_nickname_updated", {
-            username: req.user.username,
-            newNickname: nickname,
-            userId: userId
-          });
-
-          res.json({ success: true, message: "昵称更新成功", nickname });
-        } else {
-          res.status(404).json({ success: false, message: "用户不存在" });
+        if (message.quote && message.quote.userId === userId) {
+          message.quote.username = nickname;
+          if (message.quote.userName) {
+            message.quote.userName = nickname;
+          }
         }
-      } catch (error) {
-        res.status(400).json({ success: false, message: "请求数据格式错误" });
-      }
-    });
+      });
+
+      io.emit("user_nickname_updated", {
+        username: req.user.username,
+        newNickname: nickname,
+        userId: userId
+      });
+
+      res.json({ success: true, message: "昵称更新成功", nickname });
+    } else {
+      res.status(404).json({ success: false, message: "用户不存在" });
+    }
   } catch (error) {
-    res.status(500).json({ success: false, message: "服务器错误" });
+    res.status(400).json({ success: false, message: "请求数据格式错误" });
   }
 });
 
 // 获取表情包文件列表API
-router.get("/api/emojis/:category", (req, res) => {
+router.get("/emojis/:category", (req, res) => {
   // 原始逻辑完全不变
   try {
     const { category } = req.params;
@@ -251,7 +226,7 @@ router.get("/api/emojis/:category", (req, res) => {
 });
 
 // 清理不活跃用户API
-router.post("/api/cleanup-inactive-users", validateUserId, (req, res) => {
+router.post("/cleanup-inactive-users", validateUserId, (req, res) => {
   try {
     // 这里可以添加管理员权限检查，目前简化为所有用户都可以触发
     console.log(`用户 ${req.user.userId} 请求清理不活跃用户`);
@@ -286,7 +261,7 @@ router.post("/api/cleanup-inactive-users", validateUserId, (req, res) => {
   }
 });
 // 添加AI配置读取API
-router.get('/api/ai-config', validateUserId, (req, res) => {
+router.get('/ai-config', validateUserId, (req, res) => {
   try {
     const aiConfigPath = path.join(__dirname, '..', 'config', 'aiConfig.json');
     if (fs.existsSync(aiConfigPath)) {
@@ -323,7 +298,7 @@ router.get('/api/ai-config', validateUserId, (req, res) => {
 });
 
 // 添加AI配置更新API
-router.post('/api/ai-config', validateUserId, (req, res) => {
+router.post('/ai-config', validateUserId, (req, res) => {
   try {
     const data = req.body;
     if (!data) {

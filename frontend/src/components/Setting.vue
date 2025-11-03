@@ -108,7 +108,7 @@
       </el-card>
       
       <!-- Core ID设置卡片 - 仅在客户端模式下显示 -->
-      <el-card v-if="isElectron() && adminSettings.adminMode" class="setting-card core-card" shadow="hover">
+      <el-card v-if="isElectron()" class="setting-card core-card" shadow="hover">
         <template #header>
           <div class="card-header">
             <div class="header-icon">

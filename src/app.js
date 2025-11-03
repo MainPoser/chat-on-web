@@ -43,15 +43,41 @@ const io = new Server(server, {
 app.set('io', io);
 
 
+// --- 专门处理CDN图片的路由 ---
+app.get('/cdn-images/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(ROOT_DIR, "public", "cdn-images", filename);
+  
+  // 检查文件是否存在
+  const fs = require('fs');
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send('Image not found');
+  }
+  
+  // 设置正确的Content-Type
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === '.png') {
+    res.setHeader('Content-Type', 'image/png');
+  } else if (ext === '.jpg' || ext === '.jpeg') {
+    res.setHeader('Content-Type', 'image/jpeg');
+  } else if (ext === '.gif') {
+    res.setHeader('Content-Type', 'image/gif');
+  }
+  
+  // 发送文件
+  res.sendFile(filePath);
+});
+
 // --- 静态文件配置 (原全局逻辑) ---
+// 设置CDN图片目录为静态文件目录
+app.use('/cdn-images', express.static(path.join(ROOT_DIR, "public", "cdn-images")));
+// 设置emojis目录为静态文件目录，放在API路由之后
+app.use('/emojis', express.static(path.join(ROOT_DIR, "data", "emojis")));
 // 设置静态目录，用于存放Vue打包后的文件
 app.use(express.static(path.join(ROOT_DIR, "public")));
-// 设置emojis目录为静态文件目录
-app.use('/emojis', express.static(path.join(ROOT_DIR, "data", "emojis")));
-
 
 // --- 路由配置 ---
-app.use(apiRoutes);
+app.use('/api', apiRoutes);
 app.use(rootRoutes);
 
 

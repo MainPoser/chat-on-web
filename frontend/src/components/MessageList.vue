@@ -130,11 +130,29 @@
               <el-image
                 ref="imageRef"
                 style="max-width: 300px; cursor: pointer"
-                :src="message.imgUrl"
-                :preview-src-list="[message.imgUrl]"
+                :src="getFullImageUrl(message.imgUrl)"
+                :preview-src-list="[getFullImageUrl(message.imgUrl)]"
                 fit="cover"
                 :key="message.imageKey || message.imgUrl"
-              ></el-image>
+                @error="handleImageError(message)"
+              >
+                <template #error>
+                  <div class="image-error">
+                    <div class="error-icon">
+                      <el-icon><Picture /></el-icon>
+                    </div>
+                    <div class="error-text">图片加载失败</div>
+                    <el-button 
+                      size="small" 
+                      type="primary" 
+                      @click="refreshImage(message)"
+                      class="retry-btn"
+                    >
+                      重试
+                    </el-button>
+                  </div>
+                </template>
+              </el-image>
               <!-- 刷新按钮 - 只在客户端模式显示 -->
               <el-button
                 v-if="isElectron()"
@@ -187,7 +205,7 @@
 <script>
 import { ref, onMounted, watch, onUnmounted } from "vue";
 import { ElMessage, ElImage } from "element-plus";
-import { Bell, Refresh } from "@element-plus/icons-vue";
+import { Bell, Refresh, Picture } from "@element-plus/icons-vue";
 import QuoteMessage from "./quoteMessage.vue";
 import RedPacketMessage from "./RedPacketMessage.vue";
 import { isElectron } from "../utils/electronUtils.js";
@@ -366,6 +384,25 @@ export default {
       message.imageKey = `refresh_${Date.now()}_${Math.random()}`;
     };
 
+    // 处理图片加载错误
+    const handleImageError = (message) => {
+      console.error("图片加载失败:", message.imgUrl);
+      // 可以在这里添加更多的错误处理逻辑，比如标记图片为失败状态
+      message.loadError = true;
+    };
+
+    // 获取完整的图片URL
+    const getFullImageUrl = (imgUrl) => {
+      if (!imgUrl) return '';
+      // 如果已经是完整URL，直接返回
+      if (imgUrl.startsWith('http')) {
+        return imgUrl;
+      }
+      // 否则添加服务器地址
+      const serverUrl = window.location.origin;
+      return `${serverUrl}${imgUrl}`;
+    };
+
     const getClass = (message) => {
       return message.userId === props.currentUserId ? "self" : "other";
     };
@@ -407,6 +444,8 @@ export default {
       formatTime,
       getBackgroundStyle,
       refreshImage,
+      handleImageError,
+      getFullImageUrl,
       isElectron,
     };
   },
@@ -497,6 +536,35 @@ export default {
   padding: 8px 12px;
   margin: 4px 0;
   background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* 图片错误状态样式 */
+.image-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 300px;
+  height: 200px;
+  background-color: var(--background-tertiary);
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+}
+
+.error-icon {
+  font-size: 48px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.error-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.retry-btn {
+  padding: 6px 12px;
   border-radius: 12px;
   max-width: 70%;
   display: inline-block;
@@ -612,7 +680,6 @@ export default {
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 .star-bubble {
-  
   border: 1px solid rgba(255,215,0,0.18);
   box-shadow: 0 6px 30px rgba(255,130,0,0.06);
   border-radius: 14px;
