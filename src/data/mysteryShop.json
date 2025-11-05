@@ -1,25 +1,3 @@
 {
-  "core_1761550492217_tfcrfpqq5": {
-    "entranceAnimation": {
-      "hasEntranceAnimation": true,
-      "expiryDate": "2025-11-08T05:40:05.495Z",
-      "type": "mystery_shop"
-    },
-    "coreId": "core_1761550492217_tfcrfpqq5",
-    "updatedAt": "2025-11-05T05:40:05.496Z"
-  },
-  "core_1761650931918_37p1zkt0j": {
-    "avatarFrame": {
-      "hasAvatarFrame": true,
-      "expiryDate": "2025-12-26T05:44:16.838Z",
-      "type": "mystery_shop"
-    },
-    "coreId": "core_1761650931918_37p1zkt0j",
-    "updatedAt": "2025-11-05T06:52:28.403Z",
-    "entranceAnimation": {
-      "hasEntranceAnimation": true,
-      "expiryDate": "2025-12-14T05:44:20.751Z",
-      "type": "mystery_shop"
-    }
-  }
+  
 }
