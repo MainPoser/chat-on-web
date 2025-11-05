@@ -369,6 +369,94 @@
           </el-form>
         </div>
       </el-card>
+      
+      <!-- 动画和提示音设置卡片 -->
+      <el-card class="setting-card animation-sound-card" shadow="hover">
+        <template #header>
+          <div class="card-header">
+            <div class="header-icon">
+              <el-icon><BellIcon /></el-icon>
+            </div>
+            <div class="header-content">
+              <h3>动画和提示音设置</h3>
+              <p>控制出场动画和消息提示音</p>
+            </div>
+            <div class="header-actions">
+              <el-button 
+                v-if="!isEditingAnimationSound" 
+                type="primary" 
+                @click="startEditingAnimationSound" 
+                class="edit-btn"
+                size="small"
+              >
+                <el-icon><EditIcon /></el-icon>
+                编辑
+              </el-button>
+              <div v-else class="edit-actions">
+                <el-button 
+                  type="success" 
+                  @click="saveAnimationSoundSettings" 
+                  size="small"
+                >
+                  <el-icon><CheckIcon /></el-icon>
+                  保存
+                </el-button>
+                <el-button @click="cancelEditingAnimationSound" size="small">
+                  <el-icon><CloseIcon /></el-icon>
+                  取消
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </template>
+        
+        <div class="card-content">
+          <!-- 只读模式：显示当前动画和提示音设置 -->
+          <div v-if="!isEditingAnimationSound" class="info-display">
+            <div class="info-item">
+              <div class="info-label">
+                <el-icon><FilmIcon /></el-icon>
+                <span>出场动画</span>
+              </div>
+              <div class="info-value">{{ animationSoundSettings.enableEntranceAnimation ? '已启用' : '已禁用' }}</div>
+            </div>
+            
+            <div class="info-item">
+              <div class="info-label">
+                <el-icon><BellIcon /></el-icon>
+                <span>消息提示音</span>
+              </div>
+              <div class="info-value">{{ animationSoundSettings.enableNotificationSound ? '已启用' : '已禁用' }}</div>
+            </div>
+          </div>
+          
+          <!-- 编辑模式：显示表单 -->
+          <el-form 
+            v-else
+            label-position="top"
+            class="compact-form"
+            size="default"
+          >
+            <el-form-item label="出场动画">
+              <el-switch 
+                v-model="tempAnimationSoundSettings.enableEntranceAnimation"
+                active-text="启用"
+                inactive-text="禁用"
+              />
+              <div class="form-item-description">控制用户进入聊天室时的动画效果</div>
+            </el-form-item>
+            
+            <el-form-item label="消息提示音">
+              <el-switch 
+                v-model="tempAnimationSoundSettings.enableNotificationSound"
+                active-text="启用"
+                inactive-text="禁用"
+              />
+              <div class="form-item-description">控制接收新消息时的提示音效</div>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-card>
 
             <!-- 管理员状态卡片 -->
       <el-card v-if="adminSettings.adminMode" class="settings-card admin-card">
@@ -441,7 +529,9 @@ import {
   Close as CloseIcon,
   Key as KeyIcon,
   Cpu as CpuIcon,
-  Coin as CoinIcon
+  Coin as CoinIcon,
+  Bell as BellIcon,
+  Film as FilmIcon
 } from '@element-plus/icons-vue';
 
 export default {
@@ -458,7 +548,9 @@ export default {
     CloseIcon,
     KeyIcon,
     CpuIcon,
-    CoinIcon
+    CoinIcon,
+    BellIcon,
+    FilmIcon
   },
   emits: ['close', 'settings-changed'],
   setup(props, { emit }) {
@@ -468,6 +560,7 @@ export default {
     const coreSaving = ref(false);
     const isEditing = ref(false);
     const isEditingCore = ref(false);
+    const isEditingAnimationSound = ref(false); // 动画和提示音设置编辑状态
     
     // AI配置相关状态
     const aiConfigForm = ref(null);
@@ -506,6 +599,18 @@ export default {
     // 管理员设置数据模型
     const adminSettings = reactive({
       adminMode: false // 默认禁用管理员模式
+    });
+    
+    // 动画和提示音设置数据模型
+    const animationSoundSettings = reactive({
+      enableEntranceAnimation: true, // 默认启用出场动画
+      enableNotificationSound: true   // 默认启用消息提示音
+    });
+    
+    // 临时动画和提示音设置，用于编辑模式
+    const tempAnimationSoundSettings = reactive({
+      enableEntranceAnimation: true,
+      enableNotificationSound: true
     });
     
     // 版本号点击计数器
@@ -590,6 +695,7 @@ export default {
       loadMusicSettings();
       loadCoreSettings();
       loadAdminSettings();
+      loadAnimationSoundSettings(); // 加载动画和提示音设置
       loadAiConfig(); // 加载AI配置
       
       // 监听管理员模式变更事件
@@ -722,6 +828,24 @@ export default {
       }
     };
     
+    // 从localStorage加载动画和提示音设置
+    const loadAnimationSoundSettings = () => {
+      try {
+        const savedSettings = localStorage.getItem('animationSoundSettings');
+        if (savedSettings) {
+          const parsedSettings = JSON.parse(savedSettings);
+          Object.assign(animationSoundSettings, parsedSettings);
+          Object.assign(tempAnimationSoundSettings, parsedSettings);
+        } else {
+          // 如果没有保存的设置，使用默认值并保存
+          saveAnimationSoundSettingsToStorage();
+        }
+      } catch (error) {
+        console.error('加载动画和提示音设置失败:', error);
+        ElMessage.error('加载动画和提示音设置失败');
+      }
+    };
+    
     // 加载AI配置
     const loadAiConfig = async () => {
       try {
@@ -805,6 +929,43 @@ export default {
     // 取消编辑AI配置
     const cancelEditingAi = () => {
       isEditingAi.value = false;
+    };
+    
+    // 开始编辑动画和提示音设置
+    const startEditingAnimationSound = () => {
+      isEditingAnimationSound.value = true;
+      // 重置临时设置为当前设置
+      Object.assign(tempAnimationSoundSettings, animationSoundSettings);
+    };
+    
+    // 取消编辑动画和提示音设置
+    const cancelEditingAnimationSound = () => {
+      isEditingAnimationSound.value = false;
+      // 重置临时设置为当前设置
+      Object.assign(tempAnimationSoundSettings, animationSoundSettings);
+    };
+    
+    // 保存动画和提示音设置
+    const saveAnimationSoundSettings = () => {
+      // 更新实际设置
+      Object.assign(animationSoundSettings, tempAnimationSoundSettings);
+      
+      // 保存到localStorage
+      saveAnimationSoundSettingsToStorage();
+      
+      // 触发设置变更事件，父组件可以监听此事件
+      emit('settings-changed', { type: 'animationSound', ...animationSoundSettings });
+      
+      // 发送全局事件，通知Chat组件更新动画和提示音设置
+      window.dispatchEvent(new CustomEvent('animation-sound-settings-changed', {
+        detail: { ...animationSoundSettings }
+      }));
+      
+      // 退出编辑模式
+      isEditingAnimationSound.value = false;
+      
+      // 显示保存成功提示
+      ElMessage.success('动画和提示音设置保存成功');
     };
 
     // 保存AI配置
@@ -977,6 +1138,10 @@ export default {
       localStorage.setItem('adminSettings', JSON.stringify(adminSettings));
     };
     
+    const saveAnimationSoundSettingsToStorage = () => {
+      localStorage.setItem('animationSoundSettings', JSON.stringify(animationSoundSettings));
+    };
+    
     // 关闭管理员模式
     const disableAdminMode = () => {
       adminSettings.adminMode = false;
@@ -1033,19 +1198,25 @@ export default {
       coreSaving,
       isEditing,
       isEditingCore,
+      isEditingAnimationSound,
       musicSettings,
       tempMusicSettings,
       coreSettings,
       tempCoreSettings,
       adminSettings,
+      animationSoundSettings,
+      tempAnimationSoundSettings,
       musicSources,
       currentMusicSourceName,
       startEditing,
       cancelEditing,
       startEditingCore,
       cancelEditingCore,
+      startEditingAnimationSound,
+      cancelEditingAnimationSound,
       saveMusicSettings,
       saveCoreSettings,
+      saveAnimationSoundSettings,
       disableAdminMode,
       isElectron,
       appVersion,
@@ -1195,6 +1366,11 @@ export default {
   color: white;
 }
 
+.animation-sound-card .header-icon {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+  color: white;
+}
+
 .header-icon .el-icon {
   font-size: 24px;
 }
@@ -1327,6 +1503,13 @@ export default {
   font-weight: 500;
   color: var(--text-primary);
   padding-bottom: 8px;
+}
+
+.form-item-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.4;
 }
 
 /* 信息展示区域 */

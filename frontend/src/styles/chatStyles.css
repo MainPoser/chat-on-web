@@ -42,7 +42,7 @@
 
 /* 用户列表容器 - 添加半透明背景以确保可读性 */
 .user-list-container {
-  width: 250px;
+  flex: 0 0 250px;
   background-color: rgba(var(--user-list-back-color-rgb, 255, 255, 255), 0.9);
   border-right: 1px solid var(--border-color);
   display: flex;

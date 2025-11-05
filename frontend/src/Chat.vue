@@ -1400,6 +1400,21 @@ export default {
       window.location.href = window.location.origin;
     };
 
+    // 处理动画和提示音设置变更
+    const handleAnimationSoundSettingsChange = (event) => {
+      const settings = event.detail;
+      console.log('收到动画和提示音设置变更事件:', settings);
+      
+      // 更新本地设置
+      animationSoundSettings.value = {
+        enableEntranceAnimation: settings.enableEntranceAnimation !== undefined ? settings.enableEntranceAnimation : true,
+        enableNotificationSound: settings.enableNotificationSound !== undefined ? settings.enableNotificationSound : true
+      };
+      
+      // 保存到localStorage
+      localStorage.setItem('animationSoundSettings', JSON.stringify(animationSoundSettings.value));
+    };
+
     // 请求音频播放权限
     const requestAudioPermission = () => {
       try {
@@ -2336,6 +2351,9 @@ export default {
 
       // 添加音频权限事件监听器
       window.addEventListener("click", handleGlobalClickForAudioPermission);
+      
+      // 添加动画和提示音设置变更事件监听器
+      window.addEventListener('animation-sound-settings-changed', handleAnimationSoundSettingsChange);
     });
 
     // 组件卸载时执行
@@ -2354,6 +2372,10 @@ export default {
       window.removeEventListener("contextmenu", () => {});
       // 移除音频权限事件监听器
       window.removeEventListener("click", handleGlobalClickForAudioPermission);
+      
+      // 移除动画和提示音设置变更事件监听器
+      window.removeEventListener('animation-sound-settings-changed', handleAnimationSoundSettingsChange);
+      
       // 清理标题闪烁定时器
       if (titleInterval) {
         clearInterval(titleInterval);
@@ -2712,6 +2734,7 @@ export default {
       hasEntranceAnimation,
       animationSoundSettings,
       loadAnimationSoundSettings,
+      handleAnimationSoundSettingsChange,
     };
   },
 };
