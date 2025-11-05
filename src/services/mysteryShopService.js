@@ -75,7 +75,7 @@ const MYSTERY_REWARDS = [
     name: "精美头像框",
     description: "获得精美头像框3天使用权",
     duration: 3, // 天数
-    probability: 0.1, // 10%概率
+    probability: 0.06, // 6%概率
     type: "avatar_frame"
   },
   {
@@ -83,14 +83,14 @@ const MYSTERY_REWARDS = [
     name: "登录出场炫酷动画",
     description: "获得登录出场炫酷动画3天使用权",
     duration: 3, // 天数
-    probability: 0.1, // 10%概率
+    probability: 0.08, // 8%概率
     type: "entrance_animation"
   },
   {
     id: "black_bomb",
     name: "黑色炸弹",
     description: "损失200积分，如果不足200，则扣到0积分",
-    probability: 0.1, // 10%概率
+    probability: 0.05, // 5%概率
     type: "punishment"
   }
 ];
@@ -128,11 +128,29 @@ function drawMysteryReward(coreId) {
   // 生成随机数决定是否中奖
   const random = Math.random();
   let reward = null;
+  let cumulativeProbability = 0;
   
-  // 检查是否中黑色炸弹（10%概率）
-  if (random < 0.1) {
-    reward = MYSTERY_REWARDS.find(r => r.id === "black_bomb");
+  // 按照定义的概率检查每个奖励
+  for (const rewardType of MYSTERY_REWARDS) {
+    cumulativeProbability += rewardType.probability;
     
+    if (random < cumulativeProbability) {
+      reward = rewardType;
+      break;
+    }
+  }
+  
+  // 如果没有中任何奖励，返回未中奖
+  if (!reward) {
+    return {
+      success: true,
+      reward: null,
+      message: "很遗憾，您没有抽中任何礼物"
+    };
+  }
+  
+  // 处理黑色炸弹
+  if (reward.type === "punishment") {
     // 扣除额外200积分（黑色炸弹）
     const currentPoints = getUserPoints(coreId);
     const pointsToDeduct = Math.min(200, currentPoints);
@@ -157,10 +175,8 @@ function drawMysteryReward(coreId) {
     }
   }
   
-  // 检查是否中头像框（10%概率）
-  if (random < 0.2) {
-    reward = MYSTERY_REWARDS.find(r => r.id === "avatar_frame");
-    
+  // 处理头像框
+  if (reward.type === "avatar_frame") {
     // 获取用户当前神秘商店数据
     const userMysteryData = getUserMysteryData(coreId) || {};
     const currentAvatarFrame = userMysteryData.avatarFrame || {};
@@ -195,10 +211,8 @@ function drawMysteryReward(coreId) {
     };
   }
   
-  // 检查是否中出场动画（10%概率）
-  if (random < 0.3) {
-    reward = MYSTERY_REWARDS.find(r => r.id === "entrance_animation");
-    
+  // 处理出场动画
+  if (reward.type === "entrance_animation") {
     // 获取用户当前神秘商店数据
     const userMysteryData = getUserMysteryData(coreId) || {};
     const currentEntranceAnimation = userMysteryData.entranceAnimation || {};
@@ -232,13 +246,6 @@ function drawMysteryReward(coreId) {
       message: `恭喜！您抽中了登录出场炫酷动画，有效期至${newExpiryDate.toLocaleDateString()}`
     };
   }
-  
-  // 未中奖
-  return {
-    success: true,
-    reward: null,
-    message: "很遗憾，您没有抽中任何礼物"
-  };
 }
 
 // 检查用户是否有头像框
