@@ -33,6 +33,7 @@
               :current-user-id="userId"
               :user-info-map="userInfoMap"
               :is-loading="isLoadingUsers"
+              :mystery-shop-info="mysteryShopInfo"
               @user-context-menu="handleUserContextMenu"
             >
             </UserList>
@@ -102,6 +103,7 @@
             :users="users"
             :is-loading="isLoadingMessages"
             :background="selectedBackground"
+            :mystery-shop-info="mysteryShopInfo"
             @message-context-menu="handleMessageContextMenu"
             @user-context-menu="handleUserContextMenu"
             @open-red-packet="openRedPacketDialog"
@@ -196,6 +198,14 @@
                 :user-points="userPoints"
                 @create="handleCreateRedPacket"
               ></CreateRedPacketDialog>
+              
+              <!-- 神秘老人商店 -->
+              <MysteryShopDialog
+                ref="mysteryShopDialogRef"
+                :user-points="userPoints"
+                :mystery-shop-info="mysteryShopInfo"
+                @draw-reward="handleDrawMysteryReward"
+              ></MysteryShopDialog>
             </div>
             <div class="input-container">
               <el-input
@@ -425,6 +435,7 @@ import AnnouncementBar from './components/AnnouncementBar.vue';
 import BackgroundSelector from './components/BackgroundSelector.vue';
 import RedPacketDialog from './components/RedPacketDialog.vue';
 import CreateRedPacketDialog from './components/CreateRedPacketDialog.vue';
+import MysteryShopDialog from './components/MysteryShopDialog.vue';
 
 // 导入工具函数
 import { compressImage, dataURItoFile, isImageUrl } from "./utils/chatUtils.js";
@@ -454,6 +465,7 @@ export default {
     BackgroundSelector,
     RedPacketDialog,
     CreateRedPacketDialog,
+    MysteryShopDialog,
   },
   setup() {
     // 基本状态
@@ -477,6 +489,33 @@ export default {
     let originalTitle = document.title;
     let titleInterval = null;
     let hasFocus = true;
+    
+    // 动画防抖变量
+    let isAnimationPlaying = false;
+    let lastAnimationTime = 0;
+    const ANIMATION_DEBOUNCE_TIME = 5000; // 5秒防抖时间
+    
+    // 动画和提示音设置
+    const animationSoundSettings = ref({
+      enableEntranceAnimation: true,
+      enableNotificationSound: true
+    });
+
+    // 加载动画和提示音设置
+    const loadAnimationSoundSettings = () => {
+      try {
+        const savedSettings = localStorage.getItem('animationSoundSettings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          animationSoundSettings.value = {
+            enableEntranceAnimation: settings.enableEntranceAnimation !== undefined ? settings.enableEntranceAnimation : true,
+            enableNotificationSound: settings.enableNotificationSound !== undefined ? settings.enableNotificationSound : true
+          };
+        }
+      } catch (error) {
+        console.error('加载动画和提示音设置失败:', error);
+      }
+    };
 
     // 更新用户信息映射
     const updateUserInfoMap = (username, newUsername) => {
@@ -521,6 +560,17 @@ export default {
     const selectedRedPacketId = ref("");
     const redPacketDetails = ref(null); // 红包详情数据
     const userPoints = ref(0); // 初始用户积分，将从服务器获取
+    
+    // 神秘老人商店相关
+    const mysteryShopInfo = ref({
+      hasAvatarFrame: false,
+      hasEntranceAnimation: false,
+      avatarFrameDays: 0,
+      entranceAnimationDays: 0
+    });
+    
+    // 神秘老人商店对话框引用
+    const mysteryShopDialogRef = ref(null);
 
     // 动态表情映射表
     const dynamicEmojis = {
@@ -636,7 +686,12 @@ export default {
       updateUserInfoMap(username.value, username.value);
 
       // 使用相对路径，让WebSocket自动使用当前页面的主机地址
-      socket = io();
+      socket = io("/", {
+        transports: ["websocket", "polling"],
+        upgrade: true,
+        rememberUpgrade: true,
+        forceNew: true
+      });
       
       // 将socket挂载到window对象上，使其他组件可以访问
       window.socket = socket;
@@ -646,9 +701,10 @@ export default {
 
       // 连接成功
       socket.on("connect", () => {
-        console.log("WebSocket连接成功");
+        console.log("WebSocket连接成功，socket ID:", socket.id);
         // 发送userId、username和coreId加入聊天室
         socket.emit("join", { userId: userId.value, username: username.value, coreId: coreId.value });
+        console.log("发送join事件，数据:", { userId: userId.value, username: username.value, coreId: coreId.value });
 
         // 优化：将验证超时从500毫秒减少到200毫秒，进一步提高用户体验
         validationTimeout = setTimeout(() => {
@@ -810,6 +866,12 @@ export default {
           userPoints.value = currentUser.points;
           console.log(`获取当前用户 ${currentUser.username} 的积分为 ${currentUser.points}`);
         }
+        
+        // 请求神秘老人商店信息
+        socket.emit('get_mystery_shop_info', {
+          userId: userId.value,
+          coreId: coreId.value
+        });
         
         // 用户列表加载完成，更新loading状态
         isLoadingUsers.value = false;
@@ -1055,6 +1117,93 @@ export default {
         ElMessage.error(data.message || "获取红包详情失败");
       });
 
+      // 处理神秘商店信息事件
+      socket.on("mystery_shop_info", (data) => {
+        console.log("收到神秘商店信息:", data);
+        mysteryShopInfo.value = data;
+        // 不在这里播放动画，等待show_entrance_animation事件
+      });
+
+      // 处理获取神秘商店信息成功事件
+      socket.on("get_mystery_shop_info_success", (data) => {
+        console.log("获取神秘商店信息成功:", data);
+        mysteryShopInfo.value = data;
+        // 不在这里播放动画，等待show_entrance_animation事件
+      });
+
+      // 处理神秘老人商店信息更新事件
+      socket.on("mystery_shop_updated", (data) => {
+        console.log("神秘老人商店信息更新:", data);
+        mysteryShopInfo.value = data;
+      });
+
+      // 处理显示入场动画事件
+      socket.on("show_entrance_animation", (data) => {
+        console.log("收到入场动画事件:", data);
+        console.log("当前用户名:", username.value);
+        console.log("当前用户coreId:", coreId.value);
+        console.log("事件用户名:", data.username);
+        console.log("事件用户coreId:", data.coreId);
+        
+        // 检查是否是当前用户的入场动画
+        const isCurrentUser = data.username === username.value && data.coreId === coreId.value;
+        console.log("是否是当前用户的入场动画:", isCurrentUser);
+        
+        if (data && data.username) {
+          // 使用传入的用户名显示入场动画，并传入是否当前用户的标识
+          console.log("调用showEntranceAnimation函数，用户名:", data.username, "是否当前用户:", isCurrentUser);
+          showEntranceAnimation(data.username, isCurrentUser);
+        } else {
+          console.log("数据或用户名为空，不显示动画");
+        }
+      });
+
+      // 处理神秘老人商店抽取成功事件
+      socket.on("draw_mystery_reward_success", (data) => {
+        console.log("神秘老人商店抽取成功:", data);
+        // 更新用户积分
+        userPoints.value = data.points;
+        
+        // 更新用户列表中当前用户的积分
+        const userIndex = users.value.findIndex(user => user.coreId === coreId.value);
+        if (userIndex !== -1) {
+          users.value[userIndex].points = data.points;
+          console.log(`更新用户列表中 ${users.value[userIndex].username} 的积分为 ${data.points}`);
+        }
+        
+        // 显示抽取结果
+        if (data.reward && data.reward.type === 'avatar_frame') {
+          ElMessage.success(`恭喜您获得了精美头像框！有效期3天`);
+        } else if (data.reward && data.reward.type === 'entrance_animation') {
+          ElMessage.success(`恭喜您获得了登录出场炫酷动画！有效期3天`);
+        } else if (data.reward && data.reward.type === 'punishment') {
+          ElMessage.warning(`糟糕！您踩到了黑色炸弹，损失了${data.reward.pointsLost}积分！`);
+        } else if (!data.reward) {
+          ElMessage.info('很遗憾，您没有抽中任何礼物，再接再厉！');
+        }
+        
+        // 更新商店信息
+        if (data.mysteryShopInfo) {
+          mysteryShopInfo.value = data.mysteryShopInfo;
+        }
+        
+        // 重置对话框状态
+        if (mysteryShopDialogRef.value) {
+          mysteryShopDialogRef.value.resetDrawingState();
+        }
+      });
+
+      // 处理神秘老人商店抽取失败事件
+      socket.on("draw_mystery_reward_failed", (data) => {
+        console.error("神秘老人商店抽取失败:", data);
+        ElMessage.error(data.message || "抽取失败");
+        
+        // 重置对话框状态
+        if (mysteryShopDialogRef.value) {
+          mysteryShopDialogRef.value.resetDrawingState();
+        }
+      });
+
       // 处理新红包消息
       socket.on("new_red_packet", (data) => {
         // 将红包消息添加到消息列表
@@ -1243,6 +1392,9 @@ export default {
       // 移除对nickname的localStorage清除
       // localStorage.removeItem('nickname');
       // 注意：不删除localStorage中的coreId，因为coreId绑定的积分是唯一值
+      
+      // 清除localStorage中的动画和提示音设置
+      localStorage.removeItem("animationSoundSettings");
 
       // 重定向到首页（用户名输入页面）
       window.location.href = window.location.origin;
@@ -1274,6 +1426,12 @@ export default {
 
     // 播放通知声音
     const playNotificationSound = (isMentioned = false) => {
+      // 检查提示音开关
+      if (!animationSoundSettings.value.enableNotificationSound) {
+        console.log("提示音已关闭，跳过播放");
+        return;
+      }
+      
       const now = Date.now();
       // 检查是否超过了播放间隔
       if (now - lastPlaySoundTime.value > soundInterval) {
@@ -2155,6 +2313,9 @@ export default {
           }
         }
 
+        // 从localStorage加载动画和提示音设置
+        loadAnimationSoundSettings();
+
         // 确保当前用户的信息在映射表中，统一使用username
         updateUserInfoMap(username.value, username.value);
 
@@ -2241,6 +2402,235 @@ export default {
         });
       }
     };
+    
+    // 处理神秘老人商店抽取礼物
+    const handleDrawMysteryReward = () => {
+      // 通过socket发送抽取礼物请求
+      if (socket) {
+        socket.emit('draw_mystery_reward', {
+          userId: userId.value,
+          coreId: coreId.value
+        });
+      }
+    };
+
+    // 播放登录动画
+    const showEntranceAnimation = (usernameToShow = null, isCurrentUser = false) => {
+      // 检查动画开关
+      if (!animationSoundSettings.value.enableEntranceAnimation) {
+        console.log("动画已关闭，跳过播放");
+        return;
+      }
+      
+      // 防抖逻辑：检查是否正在播放动画或者距离上次播放时间太短
+      const currentTime = Date.now();
+      if (isAnimationPlaying || (currentTime - lastAnimationTime) < ANIMATION_DEBOUNCE_TIME) {
+        console.log("动画正在播放或防抖时间内，忽略本次触发");
+        return;
+      }
+      
+      // 设置动画状态和时间
+      isAnimationPlaying = true;
+      lastAnimationTime = currentTime;
+      
+      console.log("showEntranceAnimation函数被调用，参数:", usernameToShow, "是否当前用户:", isCurrentUser);
+      
+      // 如果是当前用户，播放1遍动画（修复刷新页面播放多次的问题）
+      const playCount = isCurrentUser ? 1 : 1;
+      
+      const playAnimation = (iteration) => {
+        console.log(`播放入场动画，第${iteration}遍`);
+        
+        // 创建动画元素
+        const animationContainer = document.createElement('div');
+        animationContainer.className = 'entrance-animation-container';
+        animationContainer.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 9999;
+          pointer-events: none;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          overflow: hidden;
+        `;
+
+        // 创建背景光效
+        const backgroundEffect = document.createElement('div');
+        backgroundEffect.className = 'entrance-background-effect';
+        backgroundEffect.style.cssText = `
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: radial-gradient(circle at center, rgba(255, 215, 0, 0.8) 0%, rgba(255, 105, 180, 0.6) 40%, rgba(138, 43, 226, 0.4) 70%, transparent 100%);
+          animation: backgroundPulse 3s ease-in-out;
+        `;
+
+        // 创建动画内容容器
+        const animationContent = document.createElement('div');
+        animationContent.className = 'entrance-animation-content';
+        animationContent.style.cssText = `
+          position: relative;
+          z-index: 10;
+          text-align: center;
+          animation: entranceAnimation 3s ease-in-out;
+        `;
+
+        // 创建VIP标题
+        const vipTitle = document.createElement('div');
+        vipTitle.className = 'vip-title';
+        vipTitle.style.cssText = `
+          font-size: 28px;
+          font-weight: bold;
+          color: #FFFFFF;
+          text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700, 0 0 30px #FFD700, 0 0 5px #000, 0 0 10px #000, 0 0 15px #000;
+          margin-bottom: 15px;
+          letter-spacing: 2px;
+          animation: vipGlow 2s infinite alternate;
+        `;
+        
+        // 如果是当前用户，修改标题
+        vipTitle.textContent = isCurrentUser ? '尊贵的VIP主人上线' : '尊贵的VIP用户上线';
+
+        // 创建用户名
+        const usernameElement = document.createElement('div');
+        usernameElement.className = 'username-element';
+        usernameElement.style.cssText = `
+          font-size: 32px;
+          font-weight: bold;
+          color: #FF1493;
+          text-shadow: 0 0 10px #FF1493, 0 0 20px #FF1493, 0 0 30px #FF1493;
+          margin-bottom: 20px;
+          letter-spacing: 1px;
+          animation: usernameGlow 1.5s infinite alternate;
+        `;
+        
+        // 使用传入的用户名或当前用户名
+        const displayUsername = usernameToShow || username.value;
+        usernameElement.textContent = `${displayUsername}`;
+        console.log("创建入场动画，显示用户名:", displayUsername);
+
+        // 创建装饰星星
+        const createStars = () => {
+          const starsContainer = document.createElement('div');
+          starsContainer.className = 'stars-container';
+          starsContainer.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+          `;
+          
+          for (let i = 0; i < 30; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            const size = Math.random() * 15 + 5;
+            const duration = Math.random() * 2 + 1;
+            const delay = Math.random() * 2;
+            
+            star.style.cssText = `
+              position: absolute;
+              width: ${size}px;
+              height: ${size}px;
+              background-color: #FFD700;
+              clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+              opacity: 0;
+              animation: starAnimation ${duration}s ease-in-out ${delay}s;
+              left: ${Math.random() * 100}%;
+              top: ${Math.random() * 100}%;
+            `;
+            
+            starsContainer.appendChild(star);
+          }
+          
+          return starsContainer;
+        };
+
+        // 添加动画样式
+        const style = document.createElement('style');
+        style.textContent = `
+          @keyframes entranceAnimation {
+            0% { opacity: 0; transform: scale(0.3) translateY(-100px) rotate(10deg); }
+            25% { opacity: 0.8; transform: scale(1.1) translateY(-30px) rotate(-5deg); }
+            50% { opacity: 1; transform: scale(1.2) translateY(0) rotate(0deg); }
+            75% { opacity: 0.8; transform: scale(1.1) translateY(30px) rotate(5deg); }
+            100% { opacity: 0; transform: scale(0.8) translateY(100px) rotate(10deg); }
+          }
+          
+          @keyframes backgroundPulse {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0; transform: scale(1.5); }
+          }
+          
+          @keyframes vipGlow {
+            0% { text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700, 0 0 30px #FFD700, 0 0 5px #000, 0 0 10px #000, 0 0 15px #000; }
+            100% { text-shadow: 0 0 15px #FFD700, 0 0 30px #FFD700, 0 0 45px #FFD700, 0 0 60px #FFD700, 0 0 5px #000, 0 0 10px #000, 0 0 15px #000; }
+          }
+          
+          @keyframes usernameGlow {
+            0% { text-shadow: 0 0 10px #FF1493, 0 0 20px #FF1493, 0 0 30px #FF1493; }
+            100% { text-shadow: 0 0 15px #FF1493, 0 0 30px #FF1493, 0 0 45px #FF1493, 0 0 60px #FF1493; }
+          }
+          
+          @keyframes starAnimation {
+            0% { opacity: 0; transform: scale(0) rotate(0deg); }
+            50% { opacity: 1; transform: scale(1) rotate(180deg); }
+            100% { opacity: 0; transform: scale(0) rotate(360deg); }
+          }
+        `;
+
+        // 组装元素
+        animationContent.appendChild(vipTitle);
+        animationContent.appendChild(usernameElement);
+        animationContainer.appendChild(backgroundEffect);
+        animationContainer.appendChild(animationContent);
+        animationContainer.appendChild(createStars());
+        
+        document.head.appendChild(style);
+        document.body.appendChild(animationContainer);
+        console.log("炫酷入场动画元素已添加到DOM");
+
+        // 3秒后移除动画元素
+        setTimeout(() => {
+          document.body.removeChild(animationContainer);
+          document.head.removeChild(style);
+          console.log("炫酷入场动画元素已从DOM移除");
+          
+          // 如果还有更多遍数需要播放，延迟1秒后播放下一遍
+          if (iteration < playCount) {
+            setTimeout(() => {
+              playAnimation(iteration + 1);
+            }, 1000);
+          } else {
+            // 所有动画播放完成，重置动画状态
+            isAnimationPlaying = false;
+            console.log("所有动画播放完成，重置动画状态");
+          }
+        }, 3000);
+      };
+      
+      // 开始播放第一遍动画
+      playAnimation(1);
+    };
+
+    // 测试入场动画
+    const testEntranceAnimation = () => {
+      console.log("测试入场动画按钮被点击");
+      showEntranceAnimation(username.value, true);
+    };
+
+    // 计算属性：是否有入场动画权限
+    const hasEntranceAnimation = computed(() => {
+      return mysteryShopInfo.value && mysteryShopInfo.value.hasEntranceAnimation;
+    });
 
     return {
       uploadRef,
@@ -2314,6 +2704,14 @@ export default {
       handleCreateRedPacket,
       handleReceiveRedPacket,
       updateUserInfoMap,
+      mysteryShopInfo,
+      mysteryShopDialogRef,
+      handleDrawMysteryReward,
+      showEntranceAnimation,
+      testEntranceAnimation,
+      hasEntranceAnimation,
+      animationSoundSettings,
+      loadAnimationSoundSettings,
     };
   },
 };

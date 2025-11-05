@@ -4,9 +4,10 @@
     <div class="card user-card">
       <div class="user-info">
         <div class="user-avatar">
-          <el-avatar :size="60" :src="userAvatar">
+          <el-avatar :size="60" :src="userAvatar" :class="{ 'avatar-frame': mysteryShopInfo?.hasAvatarFrame }">
             <el-icon><User /></el-icon>
           </el-avatar>
+          <span v-if="mysteryShopInfo?.hasAvatarFrame" class="vip-crown">👑</span>
           <div class="status-indicator online"></div>
         </div>
         <div class="user-details">
@@ -135,6 +136,14 @@ const onlineMinutes = ref(0);
 const canClaimDaily = ref(false);
 const lastClaimDate = ref('');
 const claiming = ref(false);
+
+// 神秘老人商店信息
+const mysteryShopInfo = ref({
+  hasAvatarFrame: false,
+  hasEntranceAnimation: false,
+  avatarFrameDays: 0,
+  entranceAnimationDays: 0
+});
 
 // 在线时长相关
 const sessionStartTime = ref(Date.now()); // 记录会话开始时间
@@ -277,23 +286,44 @@ onMounted(() => {
     });
     
     // 监听积分信息
-    window.socket.on('points_info', (data) => {
-      userPoints.value = data.points;
-      onlineMinutes.value = data.onlineMinutes || 0;
-      canClaimDaily.value = data.canClaimDaily;
-      lastClaimDate.value = data.lastClaimDate || '';
-      
-      // 将上次领取时间保存到localStorage
-      if (data.lastClaimDate) {
-        localStorage.setItem('lastClaimDate', data.lastClaimDate);
-      }
-      
-      // 保存canClaimDaily状态到localStorage
-      localStorage.setItem('canClaimDaily', data.canClaimDaily.toString());
-    });
+  window.socket.on('points_info', (data) => {
+    userPoints.value = data.points;
+    onlineMinutes.value = data.onlineMinutes || 0;
+    canClaimDaily.value = data.canClaimDaily;
+    lastClaimDate.value = data.lastClaimDate || '';
     
-    // 请求当前积分信息
-    window.socket.emit('get_points');
+    // 将上次领取时间保存到localStorage
+    if (data.lastClaimDate) {
+      localStorage.setItem('lastClaimDate', data.lastClaimDate);
+    }
+    
+    // 保存canClaimDaily状态到localStorage
+    localStorage.setItem('canClaimDaily', data.canClaimDaily.toString());
+  });
+  
+  // 监听神秘商店信息
+  window.socket.on('mystery_shop_info', (data) => {
+    console.log("Profile页面收到神秘商店信息:", data);
+    mysteryShopInfo.value = data;
+  });
+
+  // 监听获取神秘商店信息成功事件
+  window.socket.on('get_mystery_shop_info_success', (data) => {
+    console.log("Profile页面获取神秘商店信息成功:", data);
+    mysteryShopInfo.value = data;
+  });
+
+  // 监听神秘老人商店信息更新事件
+  window.socket.on('mystery_shop_updated', (data) => {
+    console.log("Profile页面神秘老人商店信息更新:", data);
+    mysteryShopInfo.value = data;
+  });
+  
+  // 请求当前积分信息
+  window.socket.emit('get_points');
+  
+  // 请求神秘商店信息
+  window.socket.emit('get_mystery_shop_info');
   }
   
   // 如果socket还未连接，添加一个延迟重试机制
@@ -301,6 +331,7 @@ onMounted(() => {
     setTimeout(() => {
       if (window.socket && window.socket.connected) {
         window.socket.emit('get_points');
+        window.socket.emit('get_mystery_shop_info');
       }
     }, 1000);
   }
@@ -309,6 +340,7 @@ onMounted(() => {
   setTimeout(() => {
     if (window.socket && window.socket.connected) {
       window.socket.emit('get_points');
+      window.socket.emit('get_mystery_shop_info');
     }
   }, 2000);
 });
@@ -374,6 +406,168 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.user-avatar .el-avatar {
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+/* 头像框样式 */
+.user-avatar .avatar-frame {
+  position: relative;
+  border: none !important;
+  padding: 4px;
+  background: linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FF8C00, #FFD700);
+  background-size: 300% 300%;
+  animation: avatar-frame-gradient 3s ease infinite;
+  box-shadow: 
+    0 0 0 2px rgba(255, 215, 0, 0.3),
+    0 0 15px rgba(255, 215, 0, 0.5),
+    0 0 30px rgba(255, 215, 0, 0.3) !important;
+  border-radius: 50%;
+}
+
+/* 头像框内部装饰 */
+.user-avatar .avatar-frame::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  background: linear-gradient(45deg, #FFD700, #FFA500, #FFD700, #FF8C00, #FFD700);
+  background-size: 300% 300%;
+  border-radius: 50%;
+  z-index: -1;
+  opacity: 0.8;
+  animation: avatar-frame-gradient 4s ease infinite reverse;
+}
+
+/* 头像框外部光晕 */
+.user-avatar .avatar-frame::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  z-index: -2;
+  animation: avatar-frame-pulse 2s ease-in-out infinite;
+}
+
+/* VIP王冠样式 */
+.user-avatar .vip-crown {
+  position: absolute;
+  top: -15px;
+  right: -15px;
+  font-size: 24px;
+  color: #FFD700;
+  text-shadow: 
+    0 0 10px rgba(255, 215, 0, 0.8),
+    0 0 20px rgba(255, 215, 0, 0.6);
+  animation: vip-crown-bounce 2s infinite;
+  z-index: 10;
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 王冠装饰光点 */
+.user-avatar .vip-crown::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+  background: #FFF;
+  border-radius: 50%;
+  animation: vip-crown-sparkle 1.5s infinite;
+}
+
+/* 暗黑模式下的VIP王冠样式 */
+.dark .user-avatar .vip-crown {
+  color: #FFD700;
+  text-shadow: 
+    0 0 15px rgba(255, 215, 0, 0.9),
+    0 0 25px rgba(255, 215, 0, 0.7);
+  filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.9));
+}
+
+@keyframes avatar-frame-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes avatar-frame-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+@keyframes avatar-frame-glow {
+  0% {
+    box-shadow: 
+      0 0 0 2px rgba(255, 215, 0, 0.3),
+      0 0 15px rgba(255, 215, 0, 0.5),
+      0 0 30px rgba(255, 215, 0, 0.3);
+  }
+  100% {
+    box-shadow: 
+      0 0 0 2px rgba(255, 215, 0, 0.5),
+      0 0 20px rgba(255, 215, 0, 0.7),
+      0 0 40px rgba(255, 215, 0, 0.5);
+  }
+}
+
+@keyframes vip-crown-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.1);
+  }
+}
+
+@keyframes vip-crown-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vip-crown-sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .status-indicator {

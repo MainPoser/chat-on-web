@@ -30,6 +30,7 @@
         >
           <div
             class="avatar"
+            :class="{ 'avatar-frame': hasAvatarFrame(user) }"
             :style="{
               backgroundColor: getAvatarColor(getDisplayUsername(user)),
             }"
@@ -38,6 +39,7 @@
             <span v-if="isCurrentUser(user)" class="current-user-indicator"
               >我</span
             >
+            <span v-if="hasAvatarFrame(user)" class="vip-crown">👑</span>
           </div>
           <div class="user-info">
             <span class="username" :title="getDisplayUsername(user)">{{
@@ -85,6 +87,10 @@ export default {
       type: Boolean,
       default: true,
     },
+    mysteryShopInfo: {
+      type: Object,
+      default: () => ({}),
+    },
   },
   emits: ["userContextMenu"],
   setup(props, { emit }) {
@@ -121,6 +127,16 @@ export default {
       // 降级处理：如果没有提供userId，则使用username匹配（保持兼容性）
       const username = typeof user === "string" ? user : user.username;
       return username === props.currentUsername;
+    };
+
+    // 判断用户是否有头像框
+    const hasAvatarFrame = (user) => {
+      // 如果是当前用户，检查mysteryShopInfo中的hasAvatarFrame
+      if (isCurrentUser(user)) {
+        return props.mysteryShopInfo?.hasAvatarFrame || false;
+      }
+      // 对于其他用户，检查用户对象中是否有hasAvatarFrame属性
+      return typeof user === "object" && user.hasAvatarFrame === true;
     };
 
     // 计算排序后的用户列表，当前用户置顶，其余按热度排序
@@ -182,6 +198,7 @@ export default {
       sortedUsers,
       getDisplayUsername,
       isCurrentUser,
+      hasAvatarFrame,
       handleUserContextMenu,
     };
   },
@@ -313,6 +330,164 @@ export default {
 /* 暗黑模式下的头像样式 */
 .theme-dark .avatar {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 头像框样式 */
+.avatar-frame {
+  position: relative;
+  border: none;
+  padding: 2px;
+  background: linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FF8C00, #FFD700);
+  background-size: 300% 300%;
+  animation: avatar-frame-gradient 3s ease infinite;
+  box-shadow: 
+    0 0 0 1px rgba(255, 215, 0, 0.3),
+    0 0 8px rgba(255, 215, 0, 0.5),
+    0 0 15px rgba(255, 215, 0, 0.3);
+}
+
+/* 头像框内部装饰 */
+.avatar-frame::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #FFD700, #FFA500, #FFD700, #FF8C00, #FFD700);
+  background-size: 300% 300%;
+  border-radius: 50%;
+  z-index: -1;
+  opacity: 0.8;
+  animation: avatar-frame-gradient 4s ease infinite reverse;
+}
+
+/* 头像框外部光晕 */
+.avatar-frame::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  right: -5px;
+  bottom: -5px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.4) 0%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  z-index: -2;
+  animation: avatar-frame-pulse 2s ease-in-out infinite;
+}
+
+/* 暗黑模式下的头像框样式 */
+.theme-dark .avatar-frame {
+  box-shadow: 
+    0 0 0 1px rgba(255, 215, 0, 0.4),
+    0 0 10px rgba(255, 215, 0, 0.7),
+    0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+@keyframes avatar-frame-glow {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* VIP王冠样式 */
+.vip-crown {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 16px;
+  color: #FFD700;
+  text-shadow: 
+    0 0 8px rgba(255, 215, 0, 0.8),
+    0 0 15px rgba(255, 215, 0, 0.6);
+  animation: vip-crown-bounce 2s infinite;
+  z-index: 2;
+  filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.8));
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0) 70%);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 王冠装饰光点 */
+.vip-crown::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 4px;
+  height: 4px;
+  background: #FFF;
+  border-radius: 50%;
+  animation: vip-crown-sparkle 1.5s infinite;
+}
+
+/* 暗黑模式下的王冠样式 */
+.theme-dark .vip-crown {
+  filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9));
+  text-shadow: 
+    0 0 10px rgba(255, 215, 0, 0.9),
+    0 0 20px rgba(255, 215, 0, 0.7);
+}
+
+@keyframes vip-crown-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.1);
+  }
+}
+
+@keyframes avatar-frame-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes avatar-frame-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+@keyframes vip-crown-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes vip-crown-sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .current-user-indicator {

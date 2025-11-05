@@ -6,6 +6,12 @@ const { DATA_DIR, NOTICE_FILE_PATH, TEMP_UPLOAD_DIR, CDN_IMAGES_DIR } = require(
 const { validateUserId } = require('../middleware/auth');
 const { mockObjectStorage } = require('../services/storageService');
 const { tempUploads } = require('../services/userService');
+const { 
+  getUserPoints, 
+  addUserPoints, 
+  reduceUserPoints, 
+  getUserInfo 
+} = require('../services/pointsService');
 
 // 获取临时签名URL接口
 router.post(
@@ -340,6 +346,102 @@ router.post('/ai-config', validateUserId, (req, res) => {
   } catch (error) {
     console.error('更新AI配置失败:', error);
     res.status(500).json({ success: false, message: '更新配置失败' });
+  }
+});
+
+// 获取用户积分API
+router.get('/user-points', validateUserId, (req, res) => {
+  try {
+    // 从请求头或查询参数获取coreId
+    const coreId = req.headers['x-core-id'] || req.query.coreId;
+    
+    if (!coreId) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少coreId参数"
+      });
+    }
+    
+    // 获取用户积分信息
+    const points = getUserPoints(coreId);
+    const userInfo = getUserInfo(coreId);
+    
+    res.json({
+      success: true,
+      data: {
+        coreId: coreId,
+        points: points,
+        userInfo: userInfo
+      }
+    });
+  } catch (error) {
+    console.error("获取用户积分失败:", error);
+    res.status(500).json({
+      success: false,
+      message: "服务器错误"
+    });
+  }
+});
+
+// 修改用户积分API
+router.post('/user-points', validateUserId, (req, res) => {
+  try {
+    const { coreId, points } = req.body;
+    
+    if (!coreId || points === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "缺少必要参数: coreId, points"
+      });
+    }
+    
+    if (isNaN(points) || points < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "积分必须是非负数"
+      });
+    }
+    
+    // 直接设置积分值
+    const currentPoints = getUserPoints(coreId);
+    let result;
+    
+    if (points > currentPoints) {
+      // 增加积分
+      result = addUserPoints(coreId, points - currentPoints);
+    } else if (points < currentPoints) {
+      // 减少积分
+      result = reduceUserPoints(coreId, currentPoints - points);
+    } else {
+      // 积分没有变化
+      result = { success: true, points: currentPoints };
+    }
+    
+    if (result) {
+      // 获取更新后的用户信息
+      const userInfo = getUserInfo(coreId);
+      
+      res.json({
+        success: true,
+        message: "积分设置成功",
+        data: {
+          coreId: coreId,
+          points: getUserPoints(coreId),
+          userInfo: userInfo
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: "积分设置失败，可能是积分不足或用户不存在"
+      });
+    }
+  } catch (error) {
+    console.error("修改用户积分失败:", error);
+    res.status(500).json({
+      success: false,
+      message: "服务器错误"
+    });
   }
 });
 

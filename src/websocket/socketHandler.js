@@ -24,6 +24,12 @@ const {
 } = require('../services/redPacketService');
 
 const starService = require('../services/starReplyService');
+const {
+  drawMysteryReward,
+  hasAvatarFrame,
+  hasEntranceAnimation,
+  getUserMysteryShopInfo
+} = require('../services/mysteryShopService');
 
 
 module.exports = (io) => {
@@ -187,6 +193,9 @@ module.exports = (io) => {
       const userPoints = getUserPoints(coreId);
       const canClaim = canClaimDailyPoints(coreId);
       const userInfo = getUserInfo(coreId);
+      
+      // 获取用户神秘商店信息
+      const mysteryShopInfo = getUserMysteryShopInfo(coreId);
 
       console.log(`${username} 加入聊天室，用户ID: ${userId}, coreId: ${coreId}, 积分: ${userPoints}`);
 
@@ -199,17 +208,28 @@ module.exports = (io) => {
         canClaimDaily: canClaim,
         onlineMinutes: userInfo?.onlineMinutes || 0
       });
+      
+      // 发送用户神秘商店信息
+      socket.emit("mystery_shop_info", mysteryShopInfo);
 
       const usersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
         const userInfo = userInfoMap.get(uid) || { userId: uid, username: null };
         // 获取每个用户的积分信息
         const userPoints = userInfo.coreId ? getUserPoints(userInfo.coreId) : 0;
+        // 获取用户的头像框和动画信息
+        const userHasAvatarFrame = userInfo.coreId ? hasAvatarFrame(userInfo.coreId) : false;
+        const userHasEntranceAnimation = userInfo.coreId ? hasEntranceAnimation(userInfo.coreId) : false;
         return {
           ...userInfo,
-          points: userPoints
+          points: userPoints,
+          hasAvatarFrame: userHasAvatarFrame,
+          hasEntranceAnimation: userHasEntranceAnimation
         };
       });
 
+      // 检查用户是否有入场动画
+      const userHasEntranceAnimation = hasEntranceAnimation(coreId);
+      
       io.emit("user_join", {
         username,
         userId,
@@ -218,6 +238,17 @@ module.exports = (io) => {
         points: userPoints,
         users: usersList,
       });
+      
+      // 如果用户有入场动画，则广播给所有用户
+      if (userHasEntranceAnimation) {
+        io.emit("show_entrance_animation", {
+          username,
+          userId,
+          coreId,
+          nickname: userInfoMap.get(userId)?.nickname || username
+        });
+        console.log(`用户 ${username} 有入场动画，已广播给所有用户`);
+      }
     });
 
   // 接收消息并广播
@@ -272,6 +303,10 @@ module.exports = (io) => {
         }
       }
 
+      // 添加用户的头像框信息到消息对象
+      const userHasAvatarFrame = userInfo.coreId ? hasAvatarFrame(userInfo.coreId) : false;
+      processedMessage.hasAvatarFrame = userHasAvatarFrame;
+
       chatHistory.push(processedMessage);
       if (chatHistory.length > MAX_HISTORY) {
         chatHistory.shift();
@@ -313,7 +348,9 @@ module.exports = (io) => {
             localId: null,
             // 前端根据这个字段渲染更绚丽的头像与消息气泡
             star: true,
-            starGradient: { from: palette[0], to: palette[1] }
+            starGradient: { from: palette[0], to: palette[1] },
+            // 明星账号默认有头像框
+            hasAvatarFrame: true
           };
 
           // 模拟人工延迟回复
@@ -909,6 +946,90 @@ module.exports = (io) => {
       socket.emit("get_user_red_packet_history_success", {
         history: history
       });
+    });
+
+    // 处理获取神秘商店信息请求
+    socket.on("get_mystery_shop_info", () => {
+      const userId = onlineUsers.get(socket.id);
+      const userInfo = userInfoMap.get(userId);
+      
+      if (!userInfo || !userInfo.coreId) {
+        socket.emit("get_mystery_shop_info_failed", { message: "用户信息不完整" });
+        return;
+      }
+      
+      // 获取用户神秘商店信息
+      const mysteryShopInfo = getUserMysteryShopInfo(userInfo.coreId);
+      
+      socket.emit("get_mystery_shop_info_success", mysteryShopInfo);
+    });
+
+    // 处理抽取神秘礼物请求
+    socket.on("draw_mystery_reward", () => {
+      const userId = onlineUsers.get(socket.id);
+      const userInfo = userInfoMap.get(userId);
+      
+      if (!userInfo || !userInfo.coreId) {
+        socket.emit("draw_mystery_reward_failed", { message: "用户信息不完整" });
+        return;
+      }
+      
+      // 抽取神秘礼物
+      const result = drawMysteryReward(userInfo.coreId);
+      
+      if (result.success) {
+        // 获取更新后的用户信息
+        const updatedPoints = getUserPoints(userInfo.coreId);
+        const mysteryShopInfo = getUserMysteryShopInfo(userInfo.coreId);
+        
+        // 发送抽取结果
+        socket.emit("draw_mystery_reward_success", {
+          reward: result.reward,
+          message: result.message,
+          points: updatedPoints,
+          mysteryShopInfo: mysteryShopInfo
+        });
+        
+        // 更新用户列表中的积分和头像框/动画信息
+        const updatedUsersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
+          const user = userInfoMap.get(uid) || { userId: uid, username: null };
+          const userPoints = user.coreId ? getUserPoints(user.coreId) : 0;
+          const userHasAvatarFrame = user.coreId ? hasAvatarFrame(user.coreId) : false;
+          const userHasEntranceAnimation = user.coreId ? hasEntranceAnimation(user.coreId) : false;
+          
+          return {
+            ...user,
+            points: userPoints,
+            hasAvatarFrame: userHasAvatarFrame,
+            hasEntranceAnimation: userHasEntranceAnimation
+          };
+        });
+        
+        // 广播更新后的用户列表
+        io.emit("users_updated", updatedUsersList);
+        
+        // 广播积分更新通知给所有用户
+        io.emit("points_updated", {
+          coreId: userInfo.coreId,
+          points: updatedPoints,
+          addedPoints: -100 // 抽取消耗100积分
+        });
+        
+        // 如果抽中了头像框或动画，广播特殊通知
+        if (result.reward && (result.reward.type === "avatar_frame" || result.reward.type === "entrance_animation")) {
+          io.emit("special_reward_notification", {
+            userId: userId,
+            username: userInfo.nickname || userInfo.username,
+            rewardType: result.reward.type,
+            rewardName: result.reward.name,
+            message: `${userInfo.nickname || userInfo.username} 抽中了 ${result.reward.name}！`
+          });
+        }
+        
+        console.log(`用户 ${userInfo.nickname} 抽取了神秘礼物，结果: ${result.message}`);
+      } else {
+        socket.emit("draw_mystery_reward_failed", { message: result.message });
+      }
     });
 
     // 用户断开连接

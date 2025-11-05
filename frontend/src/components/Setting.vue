@@ -158,6 +158,14 @@
               </div>
               <div class="info-value">{{ coreSettings.coreId || '未设置' }}</div>
             </div>
+            
+            <div class="info-item">
+              <div class="info-label">
+                <el-icon><CoinIcon /></el-icon>
+                <span>当前积分</span>
+              </div>
+              <div class="info-value">{{ coreSettings.points || 0 }}</div>
+            </div>
           </div>
           
           <!-- 编辑模式：显示表单 -->
@@ -179,6 +187,28 @@
                 placeholder="请输入客户端ID" 
                 class="w-full"
               />
+            </el-form-item>
+            
+            <el-form-item 
+              label="积分设置"
+              prop="pointsValue"
+            >
+              <div class="points-control">
+                <el-input-number 
+                  v-model="tempCoreSettings.pointsValue" 
+                  :min="0" 
+                  :max="999999"
+                  placeholder="输入积分数量" 
+                  class="points-input"
+                />
+              </div>
+            </el-form-item>
+            
+            <el-form-item v-if="tempCoreSettings.pointsValue > 0">
+              <div class="points-preview">
+                <span>当前积分: {{ coreSettings.points || 0 }}</span>
+                <span>→ 修改后: {{ tempCoreSettings.pointsValue || 0 }}</span>
+              </div>
             </el-form-item>
           </el-form>
         </div>
@@ -410,7 +440,8 @@ import {
   Edit as EditIcon,
   Close as CloseIcon,
   Key as KeyIcon,
-  Cpu as CpuIcon
+  Cpu as CpuIcon,
+  Coin as CoinIcon
 } from '@element-plus/icons-vue';
 
 export default {
@@ -426,7 +457,8 @@ export default {
     EditIcon,
     CloseIcon,
     KeyIcon,
-    CpuIcon
+    CpuIcon,
+    CoinIcon
   },
   emits: ['close', 'settings-changed'],
   setup(props, { emit }) {
@@ -461,12 +493,14 @@ export default {
     
     // Core ID设置数据模型
     const coreSettings = reactive({
-      coreId: localStorage.getItem('coreId') || ''
+      coreId: localStorage.getItem('coreId') || '',
+      points: 0
     });
     
     // 临时Core ID设置，用于编辑模式
     const tempCoreSettings = reactive({
-      coreId: coreSettings.coreId
+      coreId: coreSettings.coreId,
+      pointsValue: 0
     });
     
     // 管理员设置数据模型
@@ -564,6 +598,9 @@ export default {
       // 监听AI配置更新事件
       if (window.io && window.socket) {
         window.socket.on("ai-config-updated", handleAiConfigUpdate);
+        
+        // 监听积分更新事件
+        window.socket.on("points_updated", handlePointsUpdated);
       }
     });
     
@@ -572,8 +609,20 @@ export default {
       // 清理事件监听
       if (window.io && window.socket) {
         window.socket.off("ai-config-updated", handleAiConfigUpdate);
+        window.socket.off("points_updated", handlePointsUpdated);
       }
     });
+    
+    // 处理积分更新事件
+    const handlePointsUpdated = (data) => {
+      console.log("Setting组件接收到积分更新:", data);
+      
+      // 如果是当前用户的积分更新，更新本地显示
+      if (data.coreId && data.coreId === coreSettings.coreId) {
+        coreSettings.points = data.points || 0;
+        console.log(`更新Setting中当前用户积分为: ${data.points}`);
+      }
+    };
     
     // 处理AI配置更新事件
     const handleAiConfigUpdate = (updatedConfig) => {
@@ -589,16 +638,52 @@ export default {
     };
     
     // 从localStorage加载Core ID设置
-    const loadCoreSettings = () => {
+    const loadCoreSettings = async () => {
       try {
         const savedCoreId = localStorage.getItem('coreId');
         if (savedCoreId) {
           coreSettings.coreId = savedCoreId;
           tempCoreSettings.coreId = savedCoreId;
+          
+          // 加载用户积分
+          await loadUserPoints(savedCoreId);
         }
       } catch (error) {
         console.error('加载Core ID设置失败:', error);
         ElMessage.error('加载Core ID设置失败');
+      }
+    };
+    
+    // 加载用户积分
+    const loadUserPoints = async (coreId) => {
+      try {
+        // 检查是否在Electron环境中
+        const isElectronEnv = window.electronAPI || navigator.userAgent.toLowerCase().indexOf('electron') > -1;
+        
+        // 在Electron环境中，直接使用本地API
+        const apiUrl = isElectronEnv ? '/api/user-points' : 'http://localhost:3000/api/user-points';
+        
+        const userId = getUserId();
+        
+        const response = await fetch(`${apiUrl}?coreId=${coreId}`, {
+          headers: {
+            "x-user-id": userId,
+            "x-core-id": coreId
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+          coreSettings.points = data.data.points || 0;
+        } else {
+          console.error('加载用户积分失败:', data.message);
+        }
+      } catch (error) {
+        console.error('加载用户积分异常:', error);
       }
     };
     
@@ -700,6 +785,8 @@ export default {
       isEditingCore.value = true;
       // 重置临时设置为当前设置
       Object.assign(tempCoreSettings, coreSettings);
+      // 确保积分输入框显示当前积分值
+      tempCoreSettings.pointsValue = coreSettings.points || 0;
     };
     
     // 取消编辑Core ID
@@ -779,6 +866,13 @@ export default {
         // 保存到localStorage
         localStorage.setItem('coreId', coreSettings.coreId);
         
+        // 如果有积分操作，则执行积分修改
+        if (tempCoreSettings.pointsValue > 0) {
+          await updateUserPoints(
+            coreSettings.coreId, 
+            tempCoreSettings.pointsValue
+          );
+        }
         
         // 退出编辑模式
         isEditingCore.value = false;
@@ -795,6 +889,47 @@ export default {
         ElMessage.error('保存Core ID设置失败，请检查输入');
       } finally {
         coreSaving.value = false;
+      }
+    };
+    
+    // 更新用户积分
+    const updateUserPoints = async (coreId, points) => {
+      try {
+        // 检查是否在Electron环境中
+        const isElectronEnv = window.electronAPI || navigator.userAgent.toLowerCase().indexOf('electron') > -1;
+        
+        // 在Electron环境中，直接使用本地API
+        const apiUrl = isElectronEnv ? '/api/user-points' : 'http://localhost:3000/api/user-points';
+        
+        const userId = getUserId();
+        
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId,
+            "x-core-id": coreId
+          },
+          body: JSON.stringify({
+            coreId,
+            points
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+          coreSettings.points = data.data.points || 0;
+          ElMessage.success(`积分设置成功`);
+        } else {
+          ElMessage.error(`积分设置失败: ${data.message}`);
+        }
+      } catch (error) {
+        console.error('更新用户积分异常:', error);
+        ElMessage.error('更新用户积分失败');
       }
     };
     
@@ -926,7 +1061,10 @@ export default {
       cancelEditingAi,
       saveAiConfig,
       loadAiConfig,
-      handleAiConfigUpdate
+      handleAiConfigUpdate,
+      handlePointsUpdated,
+      loadUserPoints,
+      updateUserPoints
     };
   }
 };

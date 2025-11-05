@@ -43,6 +43,9 @@ const io = new Server(server, {
 app.set('io', io);
 
 
+// --- 路由配置 ---
+app.use('/api', apiRoutes);
+
 // --- 专门处理CDN图片的路由 ---
 app.get('/cdn-images/:filename', (req, res) => {
   const filename = req.params.filename;
@@ -76,8 +79,6 @@ app.use('/emojis', express.static(path.join(ROOT_DIR, "data", "emojis")));
 // 设置静态目录，用于存放Vue打包后的文件
 app.use(express.static(path.join(ROOT_DIR, "public")));
 
-// --- 路由配置 ---
-app.use('/api', apiRoutes);
 app.use(rootRoutes);
 
 
