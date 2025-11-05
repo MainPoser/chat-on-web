@@ -11,6 +11,7 @@
         <el-icon v-if="item.icon === 'chart'" class="icon"><ChatLineRound /></el-icon>
         <el-icon v-if="item.icon === 'music'" class="icon"><Service /></el-icon>
         <el-icon v-if="item.icon === 'profile'" class="icon"><User /></el-icon>
+        <el-icon v-if="item.icon === 'frame'" class="icon"><Monitor /></el-icon>
         <el-icon v-if="item.icon === 'settings'" class="icon"><Setting /></el-icon>
       </li>
     </ul>
@@ -18,7 +19,7 @@
 </template>
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
-import { ChatLineRound, Service, User, Setting } from '@element-plus/icons-vue';
+import { ChatLineRound, Service, User, Setting, Monitor } from '@element-plus/icons-vue';
 
 const menuList = [
   {
@@ -35,6 +36,11 @@ const menuList = [
     label: "音乐台",
     name: "music",
     icon: "music",
+  },
+  {
+    label: "网站导航",
+    name: "frame",
+    icon: "frame",
   },
   {
     label: "设置",
@@ -86,6 +92,8 @@ function setActiveMenu(name) {
     window.location.href = '#/music';
   } else if (name === 'profile') {
     window.location.href = '#/profile';
+  } else if (name === 'frame') {
+    window.location.href = '#/frame';
   } else if (name === 'settings') {
     // 设置页面处理
   }

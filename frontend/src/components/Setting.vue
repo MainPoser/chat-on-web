@@ -107,6 +107,7 @@
         </div>
       </el-card>
       
+      
       <!-- Core ID设置卡片 - 仅在客户端模式下显示 -->
       <el-card v-if="isElectron()" class="setting-card core-card" shadow="hover">
         <template #header>
@@ -531,7 +532,11 @@ import {
   Cpu as CpuIcon,
   Coin as CoinIcon,
   Bell as BellIcon,
-  Film as FilmIcon
+  Film as FilmIcon,
+  Monitor as MonitorIcon,
+  List as ListIcon,
+  Delete as DeleteIcon,
+  Plus as PlusIcon
 } from '@element-plus/icons-vue';
 
 export default {
@@ -550,7 +555,11 @@ export default {
     CpuIcon,
     CoinIcon,
     BellIcon,
-    FilmIcon
+    FilmIcon,
+    MonitorIcon,
+    ListIcon,
+    DeleteIcon,
+    PlusIcon
   },
   emits: ['close', 'settings-changed'],
   setup(props, { emit }) {
@@ -561,11 +570,25 @@ export default {
     const isEditing = ref(false);
     const isEditingCore = ref(false);
     const isEditingAnimationSound = ref(false); // 动画和提示音设置编辑状态
+    const isEditingFrame = ref(false); // 网站导航设置编辑状态
+    const frameSaving = ref(false); // 网站导航设置保存状态
     
     // AI配置相关状态
     const aiConfigForm = ref(null);
     const aiSaving = ref(false);
     const isEditingAi = ref(false);
+    
+    // 网站导航设置数据模型
+    const frameSites = ref([
+      { name: "cf-tools", url: "https://cf-tools.tianyao.qzz.io/" }
+    ]);
+    
+    // 当前选中的网站
+    const currentFrameSiteName = computed(() => {
+      const selectedName = localStorage.getItem('selectedFrameSite') || 'cf-tools';
+      const site = frameSites.value.find(site => site.name === selectedName);
+      return site ? site.name : 'cf-tools';
+    });
     
     
     // 音乐源列表
@@ -611,6 +634,16 @@ export default {
     const tempAnimationSoundSettings = reactive({
       enableEntranceAnimation: true,
       enableNotificationSound: true
+    });
+    
+    // 临时网站导航设置，用于编辑模式
+    const tempFrameSettings = reactive({
+      selectedSite: 'cf-tools',
+      sites: [
+        { name: "cf-tools", url: "https://cf-tools.tianyao.qzz.io/" }
+      ],
+      newSiteName: '',
+      newSiteUrl: ''
     });
     
     // 版本号点击计数器
@@ -696,6 +729,7 @@ export default {
       loadCoreSettings();
       loadAdminSettings();
       loadAnimationSoundSettings(); // 加载动画和提示音设置
+      loadFrameSettings(); // 加载网站导航设置
       loadAiConfig(); // 加载AI配置
       
       // 监听管理员模式变更事件
@@ -846,6 +880,22 @@ export default {
       }
     };
     
+    // 从localStorage加载网站导航设置
+    const loadFrameSettings = () => {
+      try {
+        const savedSites = localStorage.getItem('frameSites');
+        if (savedSites) {
+          frameSites.value = JSON.parse(savedSites);
+        } else {
+          // 如果没有保存的设置，使用默认值并保存
+          localStorage.setItem('frameSites', JSON.stringify(frameSites.value));
+        }
+      } catch (error) {
+        console.error('加载网站导航设置失败:', error);
+        ElMessage.error('加载网站导航设置失败');
+      }
+    };
+    
     // 加载AI配置
     const loadAiConfig = async () => {
       try {
@@ -945,6 +995,71 @@ export default {
       Object.assign(tempAnimationSoundSettings, animationSoundSettings);
     };
     
+    // 开始编辑网站导航设置
+    const startEditingFrame = () => {
+      isEditingFrame.value = true;
+      // 重置临时设置为当前设置
+      tempFrameSettings.selectedSite = localStorage.getItem('selectedFrameSite') || 'cf-tools';
+      tempFrameSettings.sites = [...frameSites.value];
+      tempFrameSettings.newSiteName = '';
+      tempFrameSettings.newSiteUrl = '';
+    };
+    
+    // 取消编辑网站导航设置
+    const cancelEditingFrame = () => {
+      isEditingFrame.value = false;
+      // 重置临时设置为当前设置
+      tempFrameSettings.newSiteName = '';
+      tempFrameSettings.newSiteUrl = '';
+    };
+    
+    // 添加新网站
+    const addFrameSite = () => {
+      if (!tempFrameSettings.newSiteName.trim() || !tempFrameSettings.newSiteUrl.trim()) {
+        ElMessage.warning('请填写完整的网站名称和URL');
+        return;
+      }
+      
+      // 检查名称是否已存在
+      if (tempFrameSettings.sites.some(site => site.name === tempFrameSettings.newSiteName)) {
+        ElMessage.warning('网站名称已存在');
+        return;
+      }
+      
+      // 添加新网站
+      tempFrameSettings.sites.push({
+        name: tempFrameSettings.newSiteName.trim(),
+        url: tempFrameSettings.newSiteUrl.trim()
+      });
+      
+      // 清空输入框
+      tempFrameSettings.newSiteName = '';
+      tempFrameSettings.newSiteUrl = '';
+      
+      ElMessage.success('网站添加成功');
+    };
+    
+    // 删除网站
+    const removeFrameSite = (siteName) => {
+      // 不允许删除cf-tools
+      if (siteName === 'cf-tools') {
+        ElMessage.warning('不能删除默认网站');
+        return;
+      }
+      
+      // 如果删除的是当前选中的网站，则切换到默认网站
+      if (tempFrameSettings.selectedSite === siteName) {
+        tempFrameSettings.selectedSite = 'cf-tools';
+      }
+      
+      // 从列表中删除
+      const index = tempFrameSettings.sites.findIndex(site => site.name === siteName);
+      if (index !== -1) {
+        tempFrameSettings.sites.splice(index, 1);
+        ElMessage.success('网站删除成功');
+      }
+    };
+    
     // 保存动画和提示音设置
     const saveAnimationSoundSettings = () => {
       // 更新实际设置
@@ -966,6 +1081,39 @@ export default {
       
       // 显示保存成功提示
       ElMessage.success('动画和提示音设置保存成功');
+    };
+    
+    // 保存网站导航设置
+    const saveFrameSettings = () => {
+      frameSaving.value = true;
+      
+      try {
+        // 更新实际设置
+        frameSites.value = [...tempFrameSettings.sites];
+        
+        // 保存到localStorage
+        localStorage.setItem('frameSites', JSON.stringify(frameSites.value));
+        localStorage.setItem('selectedFrameSite', tempFrameSettings.selectedSite);
+        
+        // 发送全局事件，通知Frame组件更新
+        window.dispatchEvent(new CustomEvent('frame-sites-changed', {
+          detail: { 
+            sites: frameSites.value,
+            selectedSite: tempFrameSettings.selectedSite
+          }
+        }));
+        
+        // 退出编辑模式
+        isEditingFrame.value = false;
+        
+        // 显示保存成功提示
+        ElMessage.success('网站导航设置保存成功');
+      } catch (error) {
+        console.error('保存网站导航设置失败:', error);
+        ElMessage.error('保存网站导航设置失败');
+      } finally {
+        frameSaving.value = false;
+      }
     };
 
     // 保存AI配置
@@ -1199,6 +1347,8 @@ export default {
       isEditing,
       isEditingCore,
       isEditingAnimationSound,
+      isEditingFrame,
+      frameSaving,
       musicSettings,
       tempMusicSettings,
       coreSettings,
@@ -1206,6 +1356,9 @@ export default {
       adminSettings,
       animationSoundSettings,
       tempAnimationSoundSettings,
+      frameSites,
+      tempFrameSettings,
+      currentFrameSiteName,
       musicSources,
       currentMusicSourceName,
       startEditing,
@@ -1214,9 +1367,14 @@ export default {
       cancelEditingCore,
       startEditingAnimationSound,
       cancelEditingAnimationSound,
+      startEditingFrame,
+      cancelEditingFrame,
+      addFrameSite,
+      removeFrameSite,
       saveMusicSettings,
       saveCoreSettings,
       saveAnimationSoundSettings,
+      saveFrameSettings,
       disableAdminMode,
       isElectron,
       appVersion,

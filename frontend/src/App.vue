@@ -29,6 +29,7 @@
         <Chat v-show="currentMenu === 'chart'"/>
         <Music v-show="currentMenu === 'music'"/>
         <Profile v-show="currentMenu === 'profile'"/>
+        <Frame v-show="currentMenu === 'frame'"/>
         <Setting v-if="currentMenu === 'settings'"/>
       </div>
     </div>
@@ -43,6 +44,7 @@ import Setting from "./components/Setting.vue";
 import Menu from "./components/Menu.vue";
 import Music from "./components/Music.vue";
 import Profile from "./views/Profile.vue";
+import Frame from "./views/Frame.vue";
 import { io } from "socket.io-client";
 import './styles/theme.scss'; // 导入主题样式
 const username = ref("");
