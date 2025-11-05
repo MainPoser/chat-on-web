@@ -1,32 +1,5 @@
 <template>
   <div class="frame-container">
-    <div class="frame-header">
-      <div class="frame-title">
-        <el-icon><Monitor /></el-icon>
-        <span>{{ currentFrameTitle }}</span>
-      </div>
-      <div class="frame-controls">
-        <el-button 
-          v-if="currentFrameUrl" 
-          type="primary" 
-          size="small" 
-          @click="refreshFrame"
-          :loading="refreshing"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-        <el-button 
-          v-if="currentFrameUrl" 
-          size="small" 
-          @click="openInNewTab"
-        >
-          <el-icon><Link /></el-icon>
-          新窗口打开
-        </el-button>
-      </div>
-    </div>
-    
     <div class="frame-content">
       <div v-if="!currentFrameUrl" class="empty-state">
         <el-icon class="empty-icon"><Monitor /></el-icon>

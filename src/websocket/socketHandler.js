@@ -1056,9 +1056,13 @@ module.exports = (io) => {
         const usersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
           const user = userInfoMap.get(uid) || { userId: uid, username: null };
           const userPoints = user.coreId ? getUserPoints(user.coreId) : 0;
+          const userHasAvatarFrame = user.coreId ? hasAvatarFrame(user.coreId) : false;
+          const userHasEntranceAnimation = user.coreId ? hasEntranceAnimation(user.coreId) : false;
           return {
             ...user,
-            points: userPoints
+            points: userPoints,
+            hasAvatarFrame: userHasAvatarFrame,
+            hasEntranceAnimation: userHasEntranceAnimation
           };
         });
 
