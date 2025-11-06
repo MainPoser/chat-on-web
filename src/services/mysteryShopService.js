@@ -75,7 +75,7 @@ const MYSTERY_REWARDS = [
     name: "精美头像框",
     description: "获得精美头像框3天使用权",
     duration: 3, // 天数
-    probability: 0.06, // 6%概率
+    probability: 0.08, // 6%概率
     type: "avatar_frame"
   },
   {
@@ -87,6 +87,30 @@ const MYSTERY_REWARDS = [
     type: "entrance_animation"
   },
   {
+    id: "points_200",
+    name: "200积分",
+    description: "获得200积分奖励",
+    points: 200,
+    probability: 0.25, // 20%概率
+    type: "points_reward"
+  },
+  {
+    id: "points_500",
+    name: "500积分",
+    description: "获得500积分奖励",
+    points: 500,
+    probability: 0.15, // 15%概率
+    type: "points_reward"
+  },
+  {
+    id: "points_1000",
+    name: "1000积分",
+    description: "获得1000积分奖励",
+    points: 1000,
+    probability: 0.10, // 10%概率
+    type: "points_reward"
+  },
+  {
     id: "black_bomb",
     name: "黑色炸弹",
     description: "损失200积分，如果不足200，则扣到0积分",
@@ -95,60 +119,8 @@ const MYSTERY_REWARDS = [
   }
 ];
 
-// 抽取神秘礼物
-function drawMysteryReward(coreId) {
-  console.log(`[MYSTERY_SHOP] 开始抽取神秘礼物:`, { coreId });
-  
-  // 参数验证
-  if (!coreId) {
-    return {
-      success: false,
-      message: "用户ID不能为空"
-    };
-  }
-  
-  // 检查用户积分是否足够
-  const userPoints = getUserPoints(coreId);
-  if (userPoints < 100) {
-    return {
-      success: false,
-      message: "积分不足，需要100积分才能抽取神秘礼物"
-    };
-  }
-  
-  // 扣除100积分
-  const pointsDeducted = reduceUserPoints(coreId, 100);
-  if (!pointsDeducted) {
-    return {
-      success: false,
-      message: "积分扣除失败"
-    };
-  }
-  
-  // 生成随机数决定是否中奖
-  const random = Math.random();
-  let reward = null;
-  let cumulativeProbability = 0;
-  
-  // 按照定义的概率检查每个奖励
-  for (const rewardType of MYSTERY_REWARDS) {
-    cumulativeProbability += rewardType.probability;
-    
-    if (random < cumulativeProbability) {
-      reward = rewardType;
-      break;
-    }
-  }
-  
-  // 如果没有中任何奖励，返回未中奖
-  if (!reward) {
-    return {
-      success: true,
-      reward: null,
-      message: "很遗憾，您没有抽中任何礼物"
-    };
-  }
-  
+// 处理奖励的函数
+function processReward(coreId, reward) {
   // 处理黑色炸弹
   if (reward.type === "punishment") {
     // 扣除额外200积分（黑色炸弹）
@@ -246,6 +218,88 @@ function drawMysteryReward(coreId) {
       message: `恭喜！您抽中了登录出场炫酷动画，有效期至${newExpiryDate.toLocaleDateString()}`
     };
   }
+  
+  // 处理积分奖励
+  if (reward.type === "points_reward") {
+    // 增加用户积分
+    const pointsAdded = addUserPoints(coreId, reward.points);
+    
+    if (pointsAdded) {
+      return {
+        success: true,
+        reward: {
+          ...reward,
+          pointsAwarded: reward.points
+        },
+        message: `恭喜！您抽中了${reward.points}积分奖励`
+      };
+    } else {
+      // 如果积分添加失败，退还之前扣除的100积分
+      addUserPoints(coreId, 100);
+      return {
+        success: false,
+        message: "积分处理失败，已退还抽取费用"
+      };
+    }
+  }
+  
+  // 未知奖励类型
+  return {
+    success: false,
+    message: "未知的奖励类型"
+  };
+}
+
+// 抽取神秘礼物
+function drawMysteryReward(coreId) {
+  console.log(`[MYSTERY_SHOP] 开始抽取神秘礼物:`, { coreId });
+  
+  // 参数验证
+  if (!coreId) {
+    return {
+      success: false,
+      message: "用户ID不能为空"
+    };
+  }
+  
+  // 检查用户积分是否足够
+  const userPoints = getUserPoints(coreId);
+  if (userPoints < 100) {
+    return {
+      success: false,
+      message: "积分不足，需要100积分才能抽取神秘礼物"
+    };
+  }
+  
+  // 扣除100积分
+  const pointsDeducted = reduceUserPoints(coreId, 100);
+  if (!pointsDeducted) {
+    return {
+      success: false,
+      message: "积分扣除失败"
+    };
+  }
+  
+  // 按照概率从高到低排序奖励
+  const sortedRewards = [...MYSTERY_REWARDS].sort((a, b) => b.probability - a.probability);
+  
+  // 对每个奖励进行独立的概率判断
+  for (const rewardType of sortedRewards) {
+    const random = Math.random(); // 生成0-1之间的随机数
+    
+    // 如果随机数小于该奖励的概率，则中该奖励
+    if (random < rewardType.probability) {
+      // 确保不会同时中多个奖励
+      return processReward(coreId, rewardType);
+    }
+  }
+  
+  // 如果没有中任何奖励，返回未中奖
+  return {
+    success: true,
+    reward: null,
+    message: "很遗憾，您没有抽中任何礼物"
+  };
 }
 
 // 检查用户是否有头像框

@@ -1176,6 +1176,8 @@ export default {
           ElMessage.success(`恭喜您获得了精美头像框！有效期3天`);
         } else if (data.reward && data.reward.type === 'entrance_animation') {
           ElMessage.success(`恭喜您获得了登录出场炫酷动画！有效期3天`);
+        } else if (data.reward && data.reward.type === 'points_reward') {
+          ElMessage.success(`恭喜您获得了${data.reward.pointsAwarded}积分奖励！`);
         } else if (data.reward && data.reward.type === 'punishment') {
           ElMessage.warning(`糟糕！您踩到了黑色炸弹，损失了${data.reward.pointsLost}积分！`);
         } else if (!data.reward) {

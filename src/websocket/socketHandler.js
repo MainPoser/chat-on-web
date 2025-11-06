@@ -1019,10 +1019,17 @@ module.exports = (io) => {
         io.emit("users_updated", updatedUsersList);
         
         // 广播积分更新通知给所有用户
+        let addedPoints = -100; // 抽取消耗100积分
+        
+        // 如果抽中积分奖励，加上奖励的积分
+        if (result.reward && result.reward.type === "points_reward") {
+          addedPoints += result.reward.pointsAwarded;
+        }
+        
         io.emit("points_updated", {
           coreId: userInfo.coreId,
           points: updatedPoints,
-          addedPoints: -100 // 抽取消耗100积分
+          addedPoints: addedPoints
         });
         
         // 如果抽中了头像框或动画，广播特殊通知
