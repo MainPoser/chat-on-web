@@ -32,6 +32,7 @@
         <Frame v-show="currentMenu === 'frame'"/>
         <Setting v-if="currentMenu === 'settings'"/>
       </div>
+      <VirtualPet />
     </div>
   </div>
 </template>
@@ -45,6 +46,7 @@ import Menu from "./components/Menu.vue";
 import Music from "./components/Music.vue";
 import Profile from "./views/Profile.vue";
 import Frame from "./views/Frame.vue";
+import VirtualPet from "./components/VirtualPet.vue";
 import { io } from "socket.io-client";
 import './styles/theme.scss'; // 导入主题样式
 const username = ref("");
@@ -84,6 +86,11 @@ onMounted(() => {
   // 初始化主题
   const savedTheme = localStorage.getItem('theme') || 'default';
   document.body.classList.add(`theme-${savedTheme}`);
+  
+  // 初始化socket连接，供VirtualPet组件使用
+  if (!window.socket) {
+    window.socket = io();
+  }
 });
 
 function setActiveMenu(name) {

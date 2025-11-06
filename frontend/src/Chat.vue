@@ -810,6 +810,14 @@ export default {
           // 检查是否被@
           const isMentioned =
             message.mentions && message.mentions.includes(username.value);
+          
+          console.log('Chat: 检查@提及', {
+            messageUsername: message.username,
+            currentUsername: username.value,
+            messageMentions: message.mentions,
+            isMentioned: isMentioned
+          });
+          
           // 显示浏览器通知
           if (
             "Notification" in window &&
@@ -847,6 +855,19 @@ export default {
 
           // 自动播放声音，因为客户端已授予权限
           playNotificationSound(isMentioned);
+          
+          // 如果被@，触发宠物提及事件
+          if (isMentioned) {
+            console.log('Chat: 准备触发user_mentioned事件，用户名:', message.username);
+            const mentionEvent = new CustomEvent('user_mentioned', {
+              detail: {
+                username: message.username,
+                content: getNotificationBody(message)
+              }
+            });
+            window.dispatchEvent(mentionEvent);
+            console.log('Chat: user_mentioned事件已派发');
+          }
           
           // 通知Electron主进程进行图标闪烁
           notifyNewMessage();
@@ -1741,20 +1762,43 @@ export default {
       // 处理@用户功能
       // 提取消息中@的所有用户，改进正则表达式以匹配所有@用户格式
       const mentionedUsers = [];
+      const mentionedUserIds = [];
       const mentionRegex = /@(\S+)/g; // 移除末尾的空格要求，匹配所有@用户格式
       let match;
       // 重置正则表达式的lastIndex以确保多次调用时正确工作
       mentionRegex.lastIndex = 0;
-      while ((match = mentionRegex.exec(messageContent)) !== null) {
+      // 使用actualMessageContent而不是messageContent，确保正确提取@用户
+      while ((match = mentionRegex.exec(actualMessageContent)) !== null) {
         const mentionedUser = match[1];
         // 检查是否是有效的在线用户
-        if (
-          users.value.includes(mentionedUser) &&
-          mentionedUser !== username.value
-        ) {
+        // 兼容处理users数组中的字符串和对象格式
+        const isValidUser = users.value.some(u => {
+          if (typeof u === 'string') {
+            return u === mentionedUser;
+          }
+          return u.username === mentionedUser;
+        });
+        
+        if (isValidUser && mentionedUser !== username.value) {
           // 避免重复添加同一个用户
           if (!mentionedUsers.includes(mentionedUser)) {
             mentionedUsers.push(mentionedUser);
+            // 获取被@用户的ID
+            // 从users数组中查找用户对象，兼容字符串和对象格式
+            const mentionedUserObj = users.value.find(u => {
+              if (typeof u === 'string') {
+                return u === mentionedUser;
+              }
+              return u.username === mentionedUser;
+            });
+            if (mentionedUserObj) {
+              // 如果是字符串用户，使用用户名作为ID
+              if (typeof mentionedUserObj === 'string') {
+                mentionedUserIds.push(mentionedUserObj);
+              } else {
+                mentionedUserIds.push(mentionedUserObj.id || mentionedUserObj.userId || mentionedUserObj.username);
+              }
+            }
           }
         }
       }
@@ -1779,6 +1823,7 @@ export default {
             }
           : null,
         mentions: mentionedUsers, // 添加被@的用户列表
+        mentionedUserIds: mentionedUserIds, // 添加被@的用户ID列表
       };
 
       // 创建唯一ID标识本次发送的消息
@@ -1918,7 +1963,82 @@ export default {
 
     // 处理输入变化
     const handleInputChange = () => {
-      // 这里可以添加输入变化的处理逻辑，例如自动完成@用户等
+      const textarea = document.querySelector(".el-textarea__inner");
+      if (!textarea) return;
+
+      const text = inputMessage.value;
+      const cursorPos = textarea.selectionStart;
+      
+      // 查找光标前最近的@符号位置
+      let atPos = -1;
+      for (let i = cursorPos - 1; i >= 0; i--) {
+        if (text[i] === '@') {
+          // 检查@前面是否是空格或者是行首
+          if (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n') {
+            atPos = i;
+            break;
+          }
+        } else if (text[i] === ' ' || text[i] === '\n') {
+          // 遇到空格或换行，停止查找
+          break;
+        }
+      }
+
+      if (atPos !== -1) {
+        // 找到了@符号，显示提及面板
+        showMentionPanel.value = true;
+        
+        // 获取输入框的位置信息
+        const rect = textarea.getBoundingClientRect();
+        
+        // 创建一个临时元素来测量文本宽度
+        const tempElement = document.createElement('span');
+        tempElement.style.position = 'absolute';
+        tempElement.style.visibility = 'hidden';
+        tempElement.style.whiteSpace = 'pre';
+        tempElement.style.font = window.getComputedStyle(textarea).font;
+        
+        // 获取从@符号到光标位置的文本
+        const textBeforeCursor = text.substring(atPos, cursorPos);
+        tempElement.textContent = textBeforeCursor;
+        document.body.appendChild(tempElement);
+        
+        // 测量文本宽度
+        const textWidth = tempElement.offsetWidth;
+        document.body.removeChild(tempElement);
+        
+        // 计算光标在输入框中的位置
+        const lines = text.substring(0, atPos).split('\n');
+        const currentLine = lines.length - 1;
+        const lineHeight = parseInt(window.getComputedStyle(textarea).lineHeight) || 20;
+        const cursorY = currentLine * lineHeight;
+        
+        // 计算相对于输入框左上角的位置
+        const inputRect = textarea.getBoundingClientRect();
+        const cursorX = textWidth;
+        
+        // 设置提及面板的位置，确保它不会超出视窗
+        const panelWidth = 200; // 提及面板的大致宽度
+        const maxLeft = window.innerWidth - panelWidth;
+        const panelLeft = inputRect.left + cursorX;
+        
+        mentionPanelX.value = Math.min(panelLeft, maxLeft);
+      } else {
+        // 没有找到@符号，隐藏提及面板
+        showMentionPanel.value = false;
+      }
+    };
+
+    // 处理点击外部区域，隐藏提及面板
+    const handleClickOutside = (event) => {
+      const mentionPanel = document.querySelector('.mention-panel');
+      const textarea = document.querySelector(".el-textarea__inner");
+      
+      // 如果点击的不是提及面板和输入框，则隐藏提及面板
+      if (mentionPanel && !mentionPanel.contains(event.target) && 
+          textarea && !textarea.contains(event.target)) {
+        showMentionPanel.value = false;
+      }
     };
 
     // 处理消息右键菜单
@@ -2033,17 +2153,52 @@ export default {
 
     // 处理选择用户用于@
     const handleSelectUserForMention = (user) => {
+      const textarea = document.querySelector(".el-textarea__inner");
+      if (!textarea) return;
+      
+      // 获取当前光标位置
+      const cursorPos = textarea.selectionStart;
+      const text = inputMessage.value;
+      
+      // 查找光标前最近的@符号位置
+      let atPos = -1;
+      for (let i = cursorPos - 1; i >= 0; i--) {
+        if (text[i] === '@') {
+          // 检查@前面是否是空格或者是行首
+          if (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n') {
+            atPos = i;
+            break;
+          }
+        } else if (text[i] === ' ' || text[i] === '\n') {
+          // 遇到空格或换行，停止查找
+          break;
+        }
+      }
+      
       // 用户可能是字符串或对象，需要兼容处理
       const username = typeof user === "string" ? user : user.username;
-      inputMessage.value += `@${username} `;
+      
+      if (atPos !== -1) {
+        // 替换@符号及其后面的内容（如果有）
+        const beforeAt = text.substring(0, atPos);
+        const afterCursor = text.substring(cursorPos);
+        inputMessage.value = `${beforeAt}@${username} ${afterCursor}`;
+        
+        // 设置光标位置到用户名后面
+        const newCursorPos = beforeAt.length + username.length + 2; // @ + username + space
+        nextTick(() => {
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+          textarea.focus();
+        });
+      } else {
+        // 如果没有找到@符号，直接添加
+        inputMessage.value += `@${username} `;
+        nextTick(() => {
+          textarea.focus();
+        });
+      }
+      
       showMentionPanel.value = false;
-      // 聚焦输入框
-      nextTick(() => {
-        const input = document.querySelector(".el-textarea__inner");
-        if (input) {
-          input.focus();
-        }
-      });
     };
 
     // 踢人对话框相关状态
@@ -2356,6 +2511,9 @@ export default {
       
       // 添加动画和提示音设置变更事件监听器
       window.addEventListener('animation-sound-settings-changed', handleAnimationSoundSettingsChange);
+      
+      // 添加点击外部区域事件监听器，用于隐藏提及面板
+      window.addEventListener("click", handleClickOutside);
     });
 
     // 组件卸载时执行
@@ -2377,6 +2535,9 @@ export default {
       
       // 移除动画和提示音设置变更事件监听器
       window.removeEventListener('animation-sound-settings-changed', handleAnimationSoundSettingsChange);
+      
+      // 移除点击外部区域事件监听器
+      window.removeEventListener("click", handleClickOutside);
       
       // 清理标题闪烁定时器
       if (titleInterval) {
@@ -2693,6 +2854,7 @@ export default {
       handleRemoveFavoriteEmoji,
       sendMessage,
       handleInputChange,
+      handleClickOutside,
       handleMessageContextMenu,
       handleUserContextMenu,
       hideContextMenu,

@@ -72,6 +72,50 @@
       </div>
     </div>
 
+    <!-- 宠物设置卡片 -->
+    <div class="card pet-card">
+      <div class="card-header">
+        <h3 class="card-title">
+          <el-icon><Star /></el-icon>
+          宠物设置
+        </h3>
+      </div>
+      
+      <div class="pet-content">
+        <div class="pet-setting-item">
+          <div class="setting-info">
+            <h4>启用宠物</h4>
+            <p>开启后，宠物将出现在页面右下角</p>
+          </div>
+          <el-switch 
+            v-model="petEnabled" 
+            @change="handlePetToggle"
+            active-color="#13ce66"
+            inactive-color="#ff4949">
+          </el-switch>
+        </div>
+        
+        <div class="pet-setting-item" v-if="petEnabled">
+          <div class="setting-info">
+            <h4>宠物样式</h4>
+            <p>选择您喜欢的宠物样式</p>
+          </div>
+          <div class="pet-style-selector">
+            <div 
+              v-for="(pet, index) in petStyles" 
+              :key="index"
+              class="pet-style-option"
+              :class="{ active: selectedPetStyle === index }"
+              @click="selectPetStyle(index)"
+            >
+              <img :src="pet.image" :alt="pet.name" class="pet-thumbnail">
+              <span class="pet-name">{{ pet.name }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 积分规则卡片 -->
     <div class="card rules-card">
       <div class="card-header">
@@ -108,6 +152,16 @@
               <el-icon><Star /></el-icon>
             </div>
             <div class="rule-text">
+              <h4>宠物互动</h4>
+              <p>与宠物互动可获得50-100积分，每日限10次</p>
+            </div>
+          </div>
+          
+          <div class="rule-item">
+            <div class="rule-icon">
+              <el-icon><Coin /></el-icon>
+            </div>
+            <div class="rule-text">
               <h4>积分用途</h4>
               <p>积分可用于解锁特殊功能</p>
             </div>
@@ -123,6 +177,8 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { User, Coin, Clock, Calendar, InfoFilled, Timer, Present, Star } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import dayjs from 'dayjs';
+import pet1Image from '../assets/pats/QQ1.gif';
+import pet2Image from '../assets/pats/Q2.gif';
 
 // 用户信息
 const username = ref('');
@@ -136,6 +192,22 @@ const onlineMinutes = ref(0);
 const canClaimDaily = ref(false);
 const lastClaimDate = ref('');
 const claiming = ref(false);
+
+// 宠物设置
+const petEnabled = ref(false);
+const selectedPetStyle = ref(0);
+const petStyles = ref([
+  { 
+    name: '小白', 
+    image: pet1Image,
+    description: '可爱的小白狗'
+  },
+  { 
+    name: 'Q版宠物', 
+    image: pet2Image,
+    description: 'Q版萌宠'
+  }
+]);
 
 // 神秘老人商店信息
 const mysteryShopInfo = ref({
@@ -182,6 +254,43 @@ function getUserInfo() {
   const storedCanClaimDaily = localStorage.getItem('canClaimDaily');
   if (storedCanClaimDaily !== null) {
     canClaimDaily.value = storedCanClaimDaily === 'true';
+  }
+  
+  // 从localStorage获取宠物设置
+  const storedPetEnabled = localStorage.getItem('petEnabled');
+  if (storedPetEnabled !== null) {
+    petEnabled.value = storedPetEnabled === 'true';
+  }
+  
+  const storedPetStyle = localStorage.getItem('selectedPetStyle');
+  if (storedPetStyle !== null) {
+    selectedPetStyle.value = parseInt(storedPetStyle, 10);
+  }
+}
+
+// 处理宠物开关切换
+function handlePetToggle(value) {
+  localStorage.setItem('petEnabled', value.toString());
+  
+  // 触发全局事件，通知其他组件宠物状态变化
+  if (window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('petToggle', { detail: { enabled: value } }));
+  }
+}
+
+// 选择宠物样式
+function selectPetStyle(index) {
+  selectedPetStyle.value = index;
+  localStorage.setItem('selectedPetStyle', index.toString());
+  
+  // 触发全局事件，通知其他组件宠物样式变化
+  if (window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('petStyleChange', { 
+      detail: { 
+        styleIndex: index,
+        petStyle: petStyles.value[index]
+      } 
+    }));
   }
 }
 
@@ -834,6 +943,88 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+/* 宠物设置卡片样式 */
+.pet-content {
+  padding: 0 32px 32px;
+}
+
+.pet-setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.pet-setting-item:last-child {
+  border-bottom: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.setting-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.setting-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #8c8c8c;
+  line-height: 1.5;
+}
+
+.pet-style-selector {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  justify-content: center;
+}
+
+.pet-style-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid #e0e0e0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: #f9f9f9;
+  width: 120px;
+}
+
+.pet-style-option:hover {
+  border-color: #1890ff;
+  background-color: rgba(24, 144, 255, 0.05);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.15);
+}
+
+.pet-style-option.active {
+  border-color: #1890ff;
+  background-color: rgba(24, 144, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.2);
+}
+
+.pet-thumbnail {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+.pet-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: center;
+}
+
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .profile-page {
@@ -850,7 +1041,8 @@ onUnmounted(() => {
   }
   
   .points-content,
-  .rules-content {
+  .rules-content,
+  .pet-content {
     padding: 0 24px 24px;
   }
 }
@@ -877,7 +1069,8 @@ onUnmounted(() => {
   }
   
   .points-content,
-  .rules-content {
+  .rules-content,
+  .pet-content {
     padding: 0 20px 20px;
   }
   
@@ -924,7 +1117,8 @@ onUnmounted(() => {
   }
   
   .points-content,
-  .rules-content {
+  .rules-content,
+  .pet-content {
     padding: 0 16px 16px;
   }
   
@@ -992,7 +1186,8 @@ onUnmounted(() => {
   }
   
   .points-content,
-  .rules-content {
+  .rules-content,
+  .pet-content {
     padding: 0 14px 14px;
   }
   

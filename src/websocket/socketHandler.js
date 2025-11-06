@@ -469,6 +469,67 @@ module.exports = (io) => {
       });
     });
 
+    // 处理宠物互动积分
+    socket.on("pet_interaction_points", (data) => {
+      const userId = onlineUsers.get(socket.id);
+      const userInfo = userInfoMap.get(userId);
+      
+      if (!userInfo || !userInfo.coreId) {
+        socket.emit("pet_interaction_points_failed", { message: "用户信息不完整" });
+        return;
+      }
+      
+      // 验证积分值
+      const points = data.points || 0;
+      if (points <= 0) {
+        socket.emit("pet_interaction_points_failed", { message: "无效的积分值" });
+        return;
+      }
+      
+      // 添加宠物互动积分
+      const result = addUserPoints(userInfo.coreId, points);
+      
+      if (result && result.success) {
+        const updatedPoints = result.points;
+        
+        // 发送积分更新成功通知给用户
+        socket.emit("pet_interaction_points_success", {
+          coreId: userInfo.coreId,
+          points: updatedPoints,
+          addedPoints: points
+        });
+        
+        // 广播积分更新通知给所有用户
+        io.emit("points_updated", {
+          coreId: userInfo.coreId,
+          points: updatedPoints,
+          addedPoints: points
+        });
+        
+        // 更新用户列表中的积分
+        const updatedUsersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
+          const userInfo = userInfoMap.get(uid) || { userId: uid, username: null };
+          const userPoints = userInfo.coreId ? getUserPoints(userInfo.coreId) : 0;
+          const userHasAvatarFrame = userInfo.coreId ? hasAvatarFrame(userInfo.coreId) : false;
+          const userHasEntranceAnimation = userInfo.coreId ? hasEntranceAnimation(userInfo.coreId) : false;
+          
+          return {
+            ...userInfo,
+            points: userPoints,
+            hasAvatarFrame: userHasAvatarFrame,
+            hasEntranceAnimation: userHasEntranceAnimation
+          };
+        });
+        
+        // 广播更新后的用户列表
+        io.emit("users_updated", updatedUsersList);
+        
+        console.log(`用户 ${userInfo.username} 通过宠物互动获得 ${points} 积分，当前积分: ${updatedPoints}`);
+      } else {
+        socket.emit("pet_interaction_points_failed", { message: "积分添加失败" });
+      }
+    });
+
     // 处理每日积分领取
     socket.on("claim_daily_points", () => {
       const userId = onlineUsers.get(socket.id);
