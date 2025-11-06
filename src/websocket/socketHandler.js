@@ -701,13 +701,18 @@ module.exports = (io) => {
           return;
         }
         
-        // 更新用户列表中的积分信息
+        // 更新用户列表中的积分和头像框/动画信息
         const updatedUsersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
           const user = userInfoMap.get(uid) || { userId: uid, username: null };
           const userPoints = user.coreId ? getUserPoints(user.coreId) : 0;
+          const userHasAvatarFrame = user.coreId ? hasAvatarFrame(user.coreId) : false;
+          const userHasEntranceAnimation = user.coreId ? hasEntranceAnimation(user.coreId) : false;
+          
           return {
             ...user,
-            points: userPoints
+            points: userPoints,
+            hasAvatarFrame: userHasAvatarFrame,
+            hasEntranceAnimation: userHasEntranceAnimation
           };
         });
         
@@ -812,13 +817,18 @@ module.exports = (io) => {
             
             console.log(`[SOCKET] Points addition result:`, pointsResult);
             
-            // 更新用户列表中的积分信息
+            // 更新用户列表中的积分和头像框/动画信息
             const updatedUsersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
               const user = userInfoMap.get(uid) || { userId: uid, username: null };
               const userPoints = user.coreId ? getUserPoints(user.coreId) : 0;
+              const userHasAvatarFrame = user.coreId ? hasAvatarFrame(user.coreId) : false;
+              const userHasEntranceAnimation = user.coreId ? hasEntranceAnimation(user.coreId) : false;
+              
               return {
                 ...user,
-                points: userPoints
+                points: userPoints,
+                hasAvatarFrame: userHasAvatarFrame,
+                hasEntranceAnimation: userHasEntranceAnimation
               };
             });
             
@@ -1080,6 +1090,24 @@ module.exports = (io) => {
     
     if (expiredRedPackets.length > 0) {
       console.log(`清理了 ${expiredRedPackets.length} 个过期红包`);
+      
+      // 更新用户列表中的积分和头像框/动画信息
+      const updatedUsersList = Array.from(onlineUsers.entries()).map(([sid, uid]) => {
+        const user = userInfoMap.get(uid) || { userId: uid, username: null };
+        const userPoints = user.coreId ? getUserPoints(user.coreId) : 0;
+        const userHasAvatarFrame = user.coreId ? hasAvatarFrame(user.coreId) : false;
+        const userHasEntranceAnimation = user.coreId ? hasEntranceAnimation(user.coreId) : false;
+        
+        return {
+          ...user,
+          points: userPoints,
+          hasAvatarFrame: userHasAvatarFrame,
+          hasEntranceAnimation: userHasEntranceAnimation
+        };
+      });
+      
+      // 广播更新后的用户列表
+      io.emit("users_updated", updatedUsersList);
       
       // 通知所有客户端过期红包已退款
       expiredRedPackets.forEach(redPacket => {
